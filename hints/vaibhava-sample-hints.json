@@ -1,0 +1,71 @@
+{
+  "input": "/tmp/vaibhava_norm_v2.docx",
+  "rules": [
+    {
+      "match": { "type": "index", "value": 13 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 14 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 15 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 16 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 17 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 18 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 19 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 20 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 21 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "index", "value": 22 },
+      "action": "ignore",
+      "style": null,
+      "note": "book-list-title"
+    },
+    {
+      "match": { "type": "regex", "value": "^[А-ЯЁA-Z][А-ЯЁA-Zа-яёa-z]{0,7}:\\s*«" },
+      "action": "review_only",
+      "style": "Источник",
+      "note": "abbrev-reference-line"
+    }
+  ]
+}

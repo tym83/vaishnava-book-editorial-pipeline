@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "target_format": "docx",
+  "target_path": "/absolute/path/to/file.docx",
+  "source_reports": [],
+  "issues": [
+    {
+      "id": "manual-0001",
+      "kind": "manual_review",
+      "severity": "warning",
+      "title": "Короткий заголовок замечания",
+      "message": "Подробное описание проблемы.",
+      "suggestion": "Что именно предлагается проверить или исправить.",
+      "anchor": {
+        "part": "word/document.xml",
+        "paragraph_index": 12,
+        "story_label": "main_story",
+        "page": 1,
+        "rect": [24, 540, 44, 560]
+      },
+      "context": {
+        "excerpt": "Короткий локальный контекст.",
+        "source_excerpt": "",
+        "target_excerpt": ""
+      },
+      "metadata": {
+        "details": {},
+        "note": "Свободное поле для внутренних пометок."
+      }
+    }
+  ]
+}

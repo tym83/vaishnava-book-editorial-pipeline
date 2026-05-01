@@ -1,0 +1,125 @@
+{
+  "input": "/home/tym83/Загрузки/Служение/Переводы Гурумахарадж/ваибхава/Shri_Bkhaktisiddkhanta_Vaybkhava_Tom1.docx",
+  "rules": [
+    {
+      "match": { "type": "id", "value": "80" },
+      "action": "set_style",
+      "style": "Сноска 1",
+      "note": "gloss-short-definition"
+    },
+    {
+      "match": { "type": "id", "value": "442" },
+      "action": "set_style",
+      "style": "Сноска 1",
+      "note": "gloss-short-definition"
+    },
+    {
+      "match": { "type": "id", "value": "568" },
+      "action": "set_style",
+      "style": "Сноска 1",
+      "note": "gloss-short-definition"
+    },
+    {
+      "match": { "type": "id", "value": "205" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "source-attribution-sentence"
+    },
+    {
+      "match": { "type": "id", "value": "211" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "source-attribution-sentence"
+    },
+    {
+      "match": { "type": "id", "value": "273" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "commentary-reference"
+    },
+    {
+      "match": { "type": "id", "value": "283" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "quoted-source-reference"
+    },
+    {
+      "match": { "type": "id", "value": "325" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "commentary-reference"
+    },
+    {
+      "match": { "type": "id", "value": "366" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "source-attribution-sentence"
+    },
+    {
+      "match": { "type": "id", "value": "523" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "scripture-reference"
+    },
+    {
+      "match": { "type": "id", "value": "555" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "bibliographic-reference"
+    },
+    {
+      "match": { "type": "id", "value": "609" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "scripture-reference"
+    },
+    {
+      "match": { "type": "id", "value": "685" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "commentary-reference"
+    },
+    {
+      "match": { "type": "id", "value": "753" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "scripture-reference"
+    },
+    {
+      "match": { "type": "id", "value": "766" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "scripture-reference"
+    },
+    {
+      "match": { "type": "id", "value": "817" },
+      "action": "set_style",
+      "style": "Сноска 2",
+      "note": "source-attribution-sentence"
+    },
+    {
+      "match": { "type": "regex", "value": "^Джати Ш" },
+      "action": "review_only",
+      "style": "Сноска 2",
+      "note": "standalone-person-attribution"
+    },
+    {
+      "match": { "type": "regex", "value": "^Ш[́]?[рР]?ӣ?ветадв" },
+      "action": "review_only",
+      "style": "Сноска 2",
+      "note": "standalone-person-attribution"
+    },
+    {
+      "match": { "type": "regex", "value": "^Б\\.Р\\." },
+      "action": "review_only",
+      "style": "Сноска 2",
+      "note": "standalone-person-attribution"
+    },
+    {
+      "match": { "type": "regex", "value": "^«Пр" },
+      "action": "review_only",
+      "style": "Сноска 2",
+      "note": "standalone-title-attribution"
+    }
+  ]
+}
