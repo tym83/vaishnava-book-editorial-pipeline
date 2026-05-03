@@ -266,6 +266,12 @@
 - `glossary_review_pack.py`
 - `glossary_apply_review.py`
 
+Важно:
+
+- extraction больше не считать главным путем принятия glossary decisions;
+- каноническая ручная база сейчас лежит в `glossary/manual_bbt_v1/glossary_approved.csv`;
+- extractor остается полезным как вспомогательный discovery tool.
+
 ---
 
 ## 6. Скрипт: source-ru-comparator
@@ -351,6 +357,7 @@
 - использует `source_ru_comparator` как structural base;
 - поднимает structural drift, aligned mismatches, reference issues;
 - добавляет deterministic checks по числам, шастрическим ссылкам, цитатам и protected terms из approved glossary;
+- `lemma_en` в approved glossary может быть списком вариантов через `|`;
 - выход: `report json/md` и optional `issue bundle json`;
 - режимы: `review` и `review-dir`.
 
@@ -372,6 +379,7 @@
 - проверяет кавычки, скобки, пробелы, тире, многоточия, повторяющуюся пунктуацию;
 - дает readability flags для длинных фраз;
 - отдельно поднимает диакритику в прозе;
+- может читать manual glossary и поднимать `discouraged_forms`;
 - выход: `report json/md` и optional `issue bundle json`;
 - режимы: `review` и `review-dir`.
 
@@ -423,6 +431,7 @@
 - есть ли локальные overrides;
 - где используется просто `Ctrl+I` / `Ctrl+B`, а где символьный стиль;
 - корректно ли размечены шлоки, письма, цитаты, подписи, сноски.
+- safe glossary-driven italic policy для `always|never` случаев из manual BBT glossary.
 
 ## Выход
 

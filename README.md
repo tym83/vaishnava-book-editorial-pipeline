@@ -23,6 +23,7 @@ What already exists:
 - reusable CLI scripts in [scripts](./scripts);
 - long-form workflow and spec documents in the repository root;
 - glossary and hint artifacts in [glossary](./glossary) and [hints](./hints);
+- a manually curated BBT-backed glossary base in [glossary/manual_bbt_v1](./glossary/manual_bbt_v1);
 - review-issue schema and appliers for `docx`, `pdf`, and `indd`.
 
 What is still intentionally human-controlled:
@@ -132,6 +133,9 @@ python3 scripts/editorial_pipeline.py run-dir source_chapters target_chapters ou
 
 Start here:
 
+- [AGENTS.md](./AGENTS.md)
+- [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+- [NEXT_STEPS.md](./NEXT_STEPS.md)
 - [docs/README.md](./docs/README.md)
 - [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)
 - [docs/REPOSITORY_STRUCTURE.md](./docs/REPOSITORY_STRUCTURE.md)

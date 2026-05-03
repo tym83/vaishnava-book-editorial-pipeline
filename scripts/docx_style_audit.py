@@ -36,6 +36,8 @@ from typing import Dict, Iterable, List, Optional
 
 from lxml import etree
 
+from glossary_policy import contains_phrase, load_glossary_policy
+
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W_NS}
@@ -338,8 +340,13 @@ def run_fonts(r) -> List[str]:
     return sorted(set(names))
 
 
-def audit_docx(docx_path: Path) -> dict:
+def run_is_italic(r_style_name: Optional[str], r_overrides: List[str]) -> bool:
+    return r_style_name == "Char Курсив" or "i" in r_overrides or "iCs" in r_overrides
+
+
+def audit_docx(docx_path: Path, glossary_approved: Optional[Path] = None) -> dict:
     styles = parse_styles(docx_path)
+    glossary_entries = [entry for entry in load_glossary_policy(glossary_approved) if entry.italic_automation in {"always", "never"}]
     default_paragraph_style = get_default_style_name(styles, "paragraph")
     defined_paragraph_styles = sorted(
         s.name for s in styles.values() if s.style_type == "paragraph"
@@ -382,6 +389,8 @@ def audit_docx(docx_path: Path) -> dict:
                 para_manual_emphasis_counter = Counter()
                 para_gaura_runs = 0
                 para_character_styles = Counter()
+                para_italic_fragments: List[str] = []
+                italic_buffer: List[str] = []
 
                 for run_idx, r in enumerate(p.xpath("./descendant::w:r", namespaces=NS), 1):
                     run_text = visible_text(r)
@@ -399,6 +408,13 @@ def audit_docx(docx_path: Path) -> dict:
                             direct_run_overrides[tag] += 1
                             para_run_override_counter[tag] += 1
 
+                    is_italic_run = run_is_italic(r_style_name, r_overrides)
+                    if is_italic_run:
+                        italic_buffer.append(run_text)
+                    elif italic_buffer:
+                        para_italic_fragments.append("".join(italic_buffer))
+                        italic_buffer = []
+
                     fonts = run_fonts(r)
                     if "Gaura Times" in fonts:
                         gaura_font_runs += 1
@@ -414,6 +430,9 @@ def audit_docx(docx_path: Path) -> dict:
                     if manual_emphasis:
                         for item in manual_emphasis:
                             para_manual_emphasis_counter[item] += 1
+
+                if italic_buffer:
+                    para_italic_fragments.append("".join(italic_buffer))
 
                 if para_run_override_counter:
                     issues.append(
@@ -462,6 +481,60 @@ def audit_docx(docx_path: Path) -> dict:
                             },
                         )
                     )
+
+                if glossary_entries and text.strip():
+                    for entry in glossary_entries:
+                        forms = entry.search_forms()
+                        if not forms:
+                            continue
+                        if entry.italic_automation == "always":
+                            if not any(contains_phrase(text, form, ignore_case=True) for form in forms):
+                                continue
+                            if any(
+                                contains_phrase(fragment, form, ignore_case=True)
+                                for fragment in para_italic_fragments
+                                for form in forms
+                            ):
+                                continue
+                            issues.append(
+                                Issue(
+                                    kind="glossary_expected_italic",
+                                    severity="warning",
+                                    part=part_name,
+                                    paragraph_index=idx,
+                                    excerpt=excerpt(text),
+                                    details={
+                                        "paragraph_style": p_style_name,
+                                        "approved_form": entry.approved_form,
+                                        "matched_forms": forms,
+                                        "italic_fragments": para_italic_fragments,
+                                        "glossary_entry_id": entry.entry_id,
+                                    },
+                                )
+                            )
+                        elif entry.italic_automation == "never":
+                            if not any(
+                                contains_phrase(fragment, form, ignore_case=True)
+                                for fragment in para_italic_fragments
+                                for form in forms
+                            ):
+                                continue
+                            issues.append(
+                                Issue(
+                                    kind="glossary_expected_roman",
+                                    severity="warning",
+                                    part=part_name,
+                                    paragraph_index=idx,
+                                    excerpt=excerpt(text),
+                                    details={
+                                        "paragraph_style": p_style_name,
+                                        "approved_form": entry.approved_form,
+                                        "matched_forms": forms,
+                                        "italic_fragments": para_italic_fragments,
+                                        "glossary_entry_id": entry.entry_id,
+                                    },
+                                )
+                            )
 
     missing_paragraph_styles = [
         name for name in CANONICAL_PARAGRAPH_STYLES if name not in defined_paragraph_styles
@@ -512,6 +585,7 @@ def audit_docx(docx_path: Path) -> dict:
         "direct_paragraph_overrides": dict(sorted(direct_paragraph_overrides.items())),
         "direct_run_overrides": dict(sorted(direct_run_overrides.items())),
         "gaura_font_runs": gaura_font_runs,
+        "glossary_policy_entries": len(glossary_entries),
         "issues": [asdict(issue) for issue in issues],
     }
 
@@ -547,6 +621,8 @@ def write_markdown_report(result: dict, out_path: Path, max_issue_lines: int = 2
     add_counter("Direct Run Overrides", result["direct_run_overrides"])
     lines.append("## Gaura Times Runs\n")
     lines.append(f"- {result['gaura_font_runs']}\n")
+    lines.append("## Glossary Policy Entries\n")
+    lines.append(f"- {result.get('glossary_policy_entries', 0)}\n")
 
     lines.append("## Issues\n")
     issues = result["issues"]
@@ -576,13 +652,14 @@ def print_summary(result: dict) -> None:
     print(f"Direct paragraph override tags: {sum(result['direct_paragraph_overrides'].values())}")
     print(f"Direct run override tags: {sum(result['direct_run_overrides'].values())}")
     print(f"Gaura Times runs: {result['gaura_font_runs']}")
+    print(f"Glossary policy entries: {result.get('glossary_policy_entries', 0)}")
     print(f"Issues: {len(result['issues'])}")
 
 
 def cmd_audit(args) -> None:
     src, temp_dir = resolve_source(Path(args.input))
     try:
-        result = audit_docx(src)
+        result = audit_docx(src, glossary_approved=Path(args.glossary_approved) if args.glossary_approved else None)
         print_summary(result)
         if args.report_json:
             Path(args.report_json).write_text(
@@ -601,6 +678,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = sub.add_parser("audit")
     audit.add_argument("input")
+    audit.add_argument("--glossary-approved")
     audit.add_argument("--report-md")
     audit.add_argument("--report-json")
     audit.add_argument("--max-issue-lines", type=int, default=200)

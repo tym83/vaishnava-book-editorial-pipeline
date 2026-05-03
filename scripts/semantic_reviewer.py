@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 from pathlib import Path
@@ -25,6 +24,7 @@ from editorial_review_common import (
     write_report_json,
     write_report_md,
 )
+from glossary_policy import load_glossary_policy
 from review_issue_utils import build_issue
 from source_ru_comparator import Block, clean_text, compare_pair, excerpt
 
@@ -41,6 +41,8 @@ PROTECTED_CATEGORIES = {
     "honorific",
     "personal_name",
     "place_name",
+    "organization",
+    "institutional_term",
 }
 HIGH_IMPACT_KINDS = {
     "heading1",
@@ -89,22 +91,18 @@ def dedupe_issues(issues: Iterable[Dict[str, object]]) -> List[Dict[str, object]
 
 
 def load_glossary_entries(path: Optional[Path]) -> List[Dict[str, str]]:
-    if path is None:
-        return []
-    with path.open(encoding="utf-8", newline="") as fh:
-        rows = list(csv.DictReader(fh))
     entries: List[Dict[str, str]] = []
-    for row in rows:
-        category = clean_text(str(row.get("category", ""))).lower()
-        approved_form = clean_text(str(row.get("approved_form", "")))
-        lemma_en = clean_text(str(row.get("lemma_en", "")))
-        if category not in PROTECTED_CATEGORIES or not approved_form or not lemma_en:
+    for entry in load_glossary_policy(path):
+        category = clean_text(entry.category).lower()
+        approved_form = clean_text(entry.approved_form)
+        lemma_en_forms = [clean_text(item) for item in entry.lemma_en_forms if clean_text(item)]
+        if category not in PROTECTED_CATEGORIES or not approved_form or not lemma_en_forms:
             continue
         entries.append(
             {
                 "category": category,
                 "approved_form": approved_form,
-                "lemma_en": lemma_en,
+                "lemma_en_forms": lemma_en_forms,
             }
         )
     return entries
@@ -325,11 +323,11 @@ def build_extra_alignment_issues(
         if source_block.word_count > 45:
             continue
         for entry in glossary_entries:
-            lemma_en = entry["lemma_en"]
+            lemma_en_forms = entry["lemma_en_forms"]
             approved_form = entry["approved_form"]
-            if not contains_phrase(source_text, lemma_en, ignore_case=True):
+            if not any(contains_phrase(source_text, lemma_en, ignore_case=True) for lemma_en in lemma_en_forms):
                 continue
-            if contains_phrase(target_text, approved_form, ignore_case=False):
+            if contains_phrase(target_text, approved_form, ignore_case=True):
                 continue
             issue_index += 1
             severity = "warning" if entry["category"] in {"philosophical_term", "scripture_title", "honorific"} else "info"
@@ -342,7 +340,7 @@ def build_extra_alignment_issues(
                     message=(
                         "В source встречается термин из защищенной терминосистемы, но его каноническая форма "
                         "не найдена в target.\n"
-                        f"Source lemma: {lemma_en}\n"
+                        f"Source lemma: {' | '.join(lemma_en_forms)}\n"
                         f"Preferred RU: {approved_form}\n"
                         f"Source: {source_text}\n"
                         f"Target: {target_text}"
@@ -354,7 +352,7 @@ def build_extra_alignment_issues(
                         "source_index": source_index,
                         "target_index": target_index,
                         "category": entry["category"],
-                        "lemma_en": lemma_en,
+                        "lemma_en_forms": lemma_en_forms,
                         "approved_form": approved_form,
                     },
                 )

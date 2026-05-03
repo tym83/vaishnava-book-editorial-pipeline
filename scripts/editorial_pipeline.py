@@ -250,7 +250,11 @@ def run_chapter(
     )
     write_bundle_from_report(report_dirs["issues"] / f"{key}.semantic.json", semantic_report)
 
-    stylistic_report = stylistic_review_file(prepared_target, story_label=options.story_label)
+    stylistic_report = stylistic_review_file(
+        prepared_target,
+        story_label=options.story_label,
+        glossary_approved=options.glossary_approved,
+    )
     stylistic_json = report_dirs["stylistic"] / f"{key}.json"
     write_json(stylistic_json, stylistic_report)
     write_markdown_index(
@@ -270,7 +274,7 @@ def run_chapter(
     if prepared_target.suffix.lower() in {".doc", ".docx"}:
         audit_src, audit_temp_dir = audit_resolve_source(prepared_target)
         try:
-            style_audit_report = audit_docx(audit_src)
+            style_audit_report = audit_docx(audit_src, glossary_approved=options.glossary_approved)
         finally:
             audit_cleanup_temp(audit_temp_dir)
         style_audit_json = report_dirs["style_audit"] / f"{key}.json"
