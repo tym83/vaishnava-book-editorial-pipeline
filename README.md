@@ -26,6 +26,13 @@ What already exists:
 - a manually curated BBT-backed glossary base in [glossary/manual_bbt_v1](./glossary/manual_bbt_v1);
 - review-issue schema and appliers for `docx`, `pdf`, and `indd`.
 
+Fast handoff/start files:
+
+- [SESSION_HANDOFF.md](./SESSION_HANDOFF.md)
+- [AGENTS.md](./AGENTS.md)
+- [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+- [NEXT_STEPS.md](./NEXT_STEPS.md)
+
 What is still intentionally human-controlled:
 
 - final translation decisions;

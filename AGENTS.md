@@ -4,10 +4,11 @@ Use this file as the first repo-local handoff when opening the project on a new 
 
 ## Read First
 
-1. [README.md](./README.md)
-2. [PROJECT_STATUS.md](./PROJECT_STATUS.md)
-3. [NEXT_STEPS.md](./NEXT_STEPS.md)
-4. [docs/README.md](./docs/README.md)
+1. [SESSION_HANDOFF.md](./SESSION_HANDOFF.md)
+2. [README.md](./README.md)
+3. [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+4. [NEXT_STEPS.md](./NEXT_STEPS.md)
+5. [docs/README.md](./docs/README.md)
 
 ## Canonical Documents
 

@@ -4,6 +4,7 @@ This directory is the GitHub-friendly entry point into the project documentation
 
 ## Start Here
 
+- [../SESSION_HANDOFF.md](../SESSION_HANDOFF.md)
 - [../AGENTS.md](../AGENTS.md)
 - [../PROJECT_STATUS.md](../PROJECT_STATUS.md)
 - [../NEXT_STEPS.md](../NEXT_STEPS.md)
