@@ -16,6 +16,7 @@ Thumbs.db
 venv/
 env/
 
+output/
+
 *.swp
 *.swo
-

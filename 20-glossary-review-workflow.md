@@ -1,104 +1,84 @@
-# Glossary Review Workflow v2
+# Glossary Review Workflow v3
 
-## 1. Вход
+## 1. Канонический порядок
 
-Черновой extraction уже собран:
+Главный путь теперь такой:
 
-- [glossary_base_draft.csv](/home/tym83/Загрузки/Служение/Automate/glossary/glossary_base_draft.csv)
-- [glossary_seed_high_signal.csv](/home/tym83/Загрузки/Служение/Automate/glossary/glossary_seed_high_signal.csv)
-- [glossary_conflicts.csv](/home/tym83/Загрузки/Служение/Automate/glossary/glossary_conflicts.csv)
+1. взять BBT rule docs из `~/Загрузки/корректура BBT`;
+2. вручную выбрать и нормализовать термины;
+3. сверить их по референсным русским книгам Бхакти Викаши Свами;
+4. дополнить русскими примерами из локального `vedabase`;
+5. собрать `approved glossary` напрямую.
 
-В `v2` этот extraction уже:
+Это важнее, чем старый extractor-first workflow.
 
-- не включает шлоки и пословный перевод;
-- не тащит `vedabase-only` кандидатов в рабочий словарь;
-- опирается прежде всего на русские книги БВКС и ваши рабочие переводы.
+## 2. Канонический файл
 
----
+Основной рабочий glossary сейчас:
 
-## 2. Что редактировать руками
+- [manual_bbt_v1/glossary_approved.csv](/home/tym83/Загрузки/Служение/Automate/glossary/manual_bbt_v1/glossary_approved.csv)
 
-Основной рабочий файл:
+Сопроводительные правила:
 
-- [glossary_review_master.csv](/home/tym83/Загрузки/Служение/Automate/glossary/review_pack/glossary_review_master.csv)
+- [manual_bbt_v1/BBT_STYLE_RULES.md](/home/tym83/Загрузки/Служение/Automate/glossary/manual_bbt_v1/BBT_STYLE_RULES.md)
+- [manual_bbt_v1/README.md](/home/tym83/Загрузки/Служение/Automate/glossary/manual_bbt_v1/README.md)
 
-Дополнительно можно смотреть категории по отдельности:
+## 3. Что считать legacy
 
-- [by_category](/home/tym83/Загрузки/Служение/Automate/glossary/review_pack/by_category)
+Эти файлы больше не считаются каноническим review set:
 
----
+- [glossary/review_pack_v2/glossary_review_master.csv](/home/tym83/Загрузки/Служение/Automate/glossary/review_pack_v2/glossary_review_master.csv)
+- [glossary/review_pack/glossary_review_master.csv](/home/tym83/Загрузки/Служение/Automate/glossary/review_pack/glossary_review_master.csv)
 
-## 3. Какие колонки важны
+Они полезны как:
 
-Редактор заполняет:
+- архив extraction;
+- список кандидатов;
+- источник шумных вариантов для дальнейшей ручной фильтрации.
 
-- `decision`
-- `approved_form_override`
-- `category_override`
-- `italic_required_override`
-- `diacritics_policy_override`
-- `merge_into`
-- `review_notes`
+## 4. Новые поля, которые реально используются
 
-Разрешенные решения в `decision`:
+В ручном glossary важны не только старые поля, но и:
 
-- `keep`
-- `drop`
-- `rename`
-- `merge`
-- `reclassify`
-- `defer`
+- `allowed_forms`
+- `discouraged_forms`
+- `italic_automation`
 
----
+Смысл:
 
-## 4. Как интерпретировать решения
+- `allowed_forms`:
+  допустимые формы и устойчивые варианты;
+- `discouraged_forms`:
+  формы, которые надо поднимать как review issue;
+- `italic_automation`:
+  только safe automation для `DOCX` style audit:
+  `always`, `never`, `skip`.
 
-### `keep`
+## 5. Что делает код
 
-Оставить запись как есть.
+- `semantic_reviewer.py`:
+  читает `lemma_en` как список английских вариантов через `|`
+- `stylistic_reviewer.py`:
+  ищет `discouraged_forms`
+- `docx_style_audit.py`:
+  проверяет safe BBT italic policy
+- `editorial_pipeline.py`:
+  прокидывает glossary во все три слоя
 
-### `drop`
+## 6. Как расширять glossary дальше
 
-Убрать как шум / ложное срабатывание.
+1. Не запускать auto-extractor как источник решений.
+2. Открывать BBT docs и добавлять term вручную.
+3. Проверять хотя бы один пример в БВКС.
+4. Проверять хотя бы один пример в `vedabase` RU, если термин там есть.
+5. Если случай неоднозначный:
+   не ставить `always|never`, а оставлять `skip`.
 
-### `rename`
+## 7. Когда возвращаться к extraction
 
-Оставить запись, но заменить `approved_form` через `approved_form_override`.
+Только после того, как:
 
-### `merge`
-
-Объединить с другой записью.  
-В `merge_into` указать целевую форму.
-
-### `reclassify`
-
-Исправить категорию через `category_override`.
-
-### `defer`
-
-Пока оставить без решения.
-
----
-
-## 5. Что запускать после ручной правки
-
-Сборщик:
-
-- [glossary_apply_review.py](/home/tym83/Загрузки/Служение/Automate/scripts/glossary_apply_review.py)
-
-Он создает:
-
-- `glossary_approved.csv`
-- `glossary_dropped.csv`
-- `glossary_pending_review.csv`
-- `glossary_aliases.csv`
-
----
-
-## 6. Общий цикл
-
-1. Пройти `glossary_review_master.csv`.
-2. Заполнить решения.
-3. Прогнать `glossary_apply_review.py`.
-4. Получить `approved glossary`.
-5. При необходимости повторить цикл.
+- `manual_bbt_v1` станет достаточно плотной базой;
+- будут ясны blacklist rules;
+- будут ясны alias rules;
+- будет понятно, какие категории extractor действительно может поднимать без сильного шума.

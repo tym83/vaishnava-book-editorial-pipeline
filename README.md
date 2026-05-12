@@ -10,6 +10,7 @@ This repository is focused on the deterministic parts of the workflow:
 - `Vedabase` reference lookup and scripture-reference cleanup;
 - semantic and stylistic review queues;
 - Word comment application;
+- single-file `*.all-review.docx` assembly for all review layers;
 - `Word -> InDesign` import support and layout QA.
 
 It is not a single "translation bot". It is an editorial pipeline around `DOCX`, review artifacts, and `InDesign`.
@@ -23,7 +24,15 @@ What already exists:
 - reusable CLI scripts in [scripts](./scripts);
 - long-form workflow and spec documents in the repository root;
 - glossary and hint artifacts in [glossary](./glossary) and [hints](./hints);
+- a manually curated BBT-backed glossary base in [glossary/manual_bbt_v1](./glossary/manual_bbt_v1);
 - review-issue schema and appliers for `docx`, `pdf`, and `indd`.
+
+Fast handoff/start files:
+
+- [SESSION_HANDOFF.md](./SESSION_HANDOFF.md)
+- [AGENTS.md](./AGENTS.md)
+- [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+- [NEXT_STEPS.md](./NEXT_STEPS.md)
 
 What is still intentionally human-controlled:
 
@@ -43,7 +52,7 @@ High-level editorial flow:
 5. Run stylistic/proofreading queue.
 6. Run style and footnote checks.
 7. Merge issues into a single review bundle.
-8. Apply comments to `DOCX` or annotations to `PDF` / notes to `InDesign`.
+8. Build one editor-facing `*.all-review.docx` containing all Word comments.
 9. Import into `InDesign` and run layout QA.
 
 The canonical long-form workflow is in [04-master-workflow.md](./04-master-workflow.md).
@@ -72,6 +81,7 @@ Main CLI tools:
 - [stylistic_reviewer.py](./scripts/stylistic_reviewer.py)
 - [old_ru_vs_new_en_update_helper.py](./scripts/old_ru_vs_new_en_update_helper.py)
 - [editorial_pipeline.py](./scripts/editorial_pipeline.py)
+- [all_review_docx_builder.py](./scripts/all_review_docx_builder.py)
 - [docx_comment_applier.py](./scripts/docx_comment_applier.py)
 - [word_to_indesign_import.jsx](./scripts/word_to_indesign_import.jsx)
 - [indesign_layout_qa.jsx](./scripts/indesign_layout_qa.jsx)
@@ -132,6 +142,9 @@ python3 scripts/editorial_pipeline.py run-dir source_chapters target_chapters ou
 
 Start here:
 
+- [AGENTS.md](./AGENTS.md)
+- [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+- [NEXT_STEPS.md](./NEXT_STEPS.md)
 - [docs/README.md](./docs/README.md)
 - [docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)
 - [docs/REPOSITORY_STRUCTURE.md](./docs/REPOSITORY_STRUCTURE.md)

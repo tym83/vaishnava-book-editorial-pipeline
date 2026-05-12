@@ -266,6 +266,12 @@
 - `glossary_review_pack.py`
 - `glossary_apply_review.py`
 
+Важно:
+
+- extraction больше не считать главным путем принятия glossary decisions;
+- каноническая ручная база сейчас лежит в `glossary/manual_bbt_v1/glossary_approved.csv`;
+- extractor остается полезным как вспомогательный discovery tool.
+
 ---
 
 ## 6. Скрипт: source-ru-comparator
@@ -351,6 +357,7 @@
 - использует `source_ru_comparator` как structural base;
 - поднимает structural drift, aligned mismatches, reference issues;
 - добавляет deterministic checks по числам, шастрическим ссылкам, цитатам и protected terms из approved glossary;
+- `lemma_en` в approved glossary может быть списком вариантов через `|`;
 - выход: `report json/md` и optional `issue bundle json`;
 - режимы: `review` и `review-dir`.
 
@@ -372,6 +379,7 @@
 - проверяет кавычки, скобки, пробелы, тире, многоточия, повторяющуюся пунктуацию;
 - дает readability flags для длинных фраз;
 - отдельно поднимает диакритику в прозе;
+- может читать manual glossary и поднимать `discouraged_forms`;
 - выход: `report json/md` и optional `issue bundle json`;
 - режимы: `review` и `review-dir`.
 
@@ -423,6 +431,7 @@
 - есть ли локальные overrides;
 - где используется просто `Ctrl+I` / `Ctrl+B`, а где символьный стиль;
 - корректно ли размечены шлоки, письма, цитаты, подписи, сноски.
+- safe glossary-driven italic policy для `always|never` случаев из manual BBT glossary.
 
 ## Выход
 
@@ -435,19 +444,13 @@
 
 ## Назначение
 
-Разнести Word-сноски по 4 каноническим стилям:
+Привести Word-сноски к одному каноническому стилю:
 
-- `Сноска 1`
-- `Сноска 2`
-- `Сноска 3`
-- `Сноска 4`
+- `Сноска`
 
 ## Рабочая семантика
 
-- `Сноска 1` — пояснительная / словарная / контекстная
-- `Сноска 2` — ссылочная / библиографическая / цитатная
-- `Сноска 3` — переводческая
-- `Сноска 4` — перекрестная / редакторская / навигационная
+В текущем стандарте текст сносок не делится на четыре типа. Все реальные абзацы сносок используют `Сноска`; legacy-стили `Сноска 1/2/3/4` нормализуются в `Сноска`.
 
 ## Что должен уметь
 
@@ -456,6 +459,73 @@
 - строить `report md/json`
 - экспортировать hints template
 - поддерживать ручные hints для спорных случаев
+
+---
+
+## 8.2. Скрипт: docx-footnote-reference-normalizer
+
+## Назначение
+
+Нормализовать позицию маркеров сносок внутри основного текста.
+
+Реализация:
+
+- [docx_footnote_reference_normalizer.py](/home/tym83/Загрузки/Служение/Automate/scripts/docx_footnote_reference_normalizer.py)
+
+## Что должен уметь
+
+- работать с `docx` и `doc`;
+- менять только `word/document.xml`;
+- переставлять пунктуацию из формы `слово.<footnoteReference>` в `слово<footnoteReference>.`;
+- не менять текст сносок в `word/footnotes.xml`;
+- строить `report md/json` со списком измененных маркеров.
+
+## Когда запускать
+
+После style/dediacritic/style-enforcer проходов, если нужно точечно поправить позицию маркеров без изменения остального форматирования.
+
+---
+
+## 8.3. Скрипт: docx-style-enforcer
+
+## Назначение
+
+Подготовить DOCX к верстке так, чтобы визуальная геометрия жила в стилях, а не в ручном форматировании.
+
+Реализация:
+
+- [docx_style_enforcer.py](/home/tym83/Загрузки/Служение/Automate/scripts/docx_style_enforcer.py)
+
+## Что делает
+
+- задает параметры канонических блоковых стилей:
+  - базовая гарнитура `Charis SIL` в `docDefaults` и во всех paragraph/character styles;
+  - `Шлока`: левый отступ `2 см`, курсив, центр;
+  - `Шлока в цитате`: левый отступ `3 см`, курсив, центр;
+  - `Перевод шлоки`: левый отступ `2 см`;
+  - `Цитата 1`: левый отступ `2 см`;
+  - `Цитата 2`: левый отступ `3 см`;
+- удаляет direct paragraph overrides из `pPr`;
+- удаляет direct run overrides из `rPr`;
+- сохраняет канонические символьные стили `Char Курсив` / `Char Полужирный`;
+- сохраняет служебные стили ссылок сносок, если они нужны Word для структуры.
+
+Для `docx_prose_dediacritizer.py`: стиль `Сноска` считается прозой по умолчанию. Диакритика в нем сохраняется только для явного самостоятельного санскритского блока, а имена и термины нормализуются без диакритики.
+
+Для `docx_semantic_style_classifier.py`: визуальный блок считается по эффективному отступу `max(left, left + firstLine)`, чтобы строки шлок с висячим отступом не выпадали из стиля `Шлока`. Отдельные кавычечные абзацы с визуальным отступом классифицируются как `Цитата 1` без верхнего лимита в 180 слов.
+
+## Когда запускать
+
+После:
+
+- `docx_footnote_classifier.py`;
+- `docx_semantic_style_classifier.py`;
+- `docx_prose_dediacritizer.py`.
+
+Перед:
+
+- финальным `docx_style_audit.py`;
+- импортом в InDesign.
 
 ---
 
@@ -726,6 +796,34 @@ Reference-aware issues используют те же anchors, что и `docx_c
 
 ---
 
+## 12.1. Скрипт: all-review-docx-builder
+
+## Назначение
+
+Собрать один редакторский `DOCX` книги со всеми слоями комментариев.
+
+Реализация v1:
+
+- [all_review_docx_builder.py](/home/tym83/Загрузки/Служение/Automate/scripts/all_review_docx_builder.py)
+
+## Что делает
+
+- принимает чистый `*.formatted.docx`;
+- отказывается от входного DOCX с уже существующими комментариями, если явно не передан `--allow-existing-comments`;
+- принимает несколько issue bundles: корректура, стили, semantic-style candidates, поверхностная сверка, глубокое EN/RU review;
+- объединяет их через `review_issue_bundle.py merge`;
+- применяет объединенный bundle через `docx_comment_applier.py`;
+- проверяет `skipped == 0` по умолчанию;
+- сверяет число примененных issues с фактическим числом `w:comment`;
+- сохраняет итог как `*.all-review.docx`;
+- при необходимости синхронизирует legacy-имена `*.review-comments.docx` и `*.master-review.docx` с тем же файлом.
+
+## Правило
+
+Для редактора финальный файл ревью должен быть один: `*.all-review.docx`. Промежуточные `md/json` отчеты и `review/deep_packs/*.md` являются audit trail, но не отдельным местом для внесения правок.
+
+---
+
 ## 13. Скрипт: pdf-annotation-applier
 
 ## Назначение
@@ -781,6 +879,19 @@ Reference-aware issues используют те же anchors, что и `docx_c
 ---
 
 ## 15. Приоритет реализации скриптов
+
+## 14.1. Project-specific Vibhava review helpers
+
+Текущая книга `Śrī Bhaktisiddhānta Vaibhava`, Tom 1, использует отдельные helper-скрипты поверх общего pipeline:
+
+- `vibhava_pdf_section_slicer.py`: режет английский PDF text layer на review sections;
+- `vibhava_ru_review_section_slicer.py`: строит корректную RU review-нарезку на 84 секции, если часть заголовков в исходном split оказалась стилем `Основной текст`;
+- `vibhava_translation_review_pack.py`: делает EN/RU side-by-side packs для смысловой сверки;
+- `vibhava_review_comment_bundle.py`: превращает принятые review findings в issue bundle, anchored к полному DOCX книги.
+
+Правило: после смыслового review результат должен быть применен к полной копии DOCX через `docx_comment_applier.py`; markdown packs не являются финальным редакторским deliverable.
+
+---
 
 ### Первая волна
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
 
@@ -23,7 +24,9 @@ from editorial_review_common import (
     write_report_json,
     write_report_md,
 )
+from glossary_policy import contains_phrase, load_glossary_policy
 from review_issue_utils import build_issue
+from sanskrit_diacritics import classify_diacritic_context
 from source_ru_comparator import Block, clean_text
 
 
@@ -243,7 +246,8 @@ def analyze_block(block: Block, story_label: str, issue_counter: List[int]) -> L
                     },
                 )
             )
-        if block.translit_score >= 3:
+        diacritic_decision = classify_diacritic_context(block.text, style_name=block.style_name)
+        if diacritic_decision.action == "normalize_prose":
             issues.append(
                 issue_from_block(
                     block,
@@ -251,9 +255,16 @@ def analyze_block(block: Block, story_label: str, issue_counter: List[int]) -> L
                     kind="stylistic_diacritics_in_prose",
                     severity="info",
                     title="Проверить диакритику в прозе",
-                    message="В прозаическом абзаце есть выраженная санскритская диакритика.",
-                    suggestion="Проверить, должна ли диакритика сохраняться в этом месте или ее нужно снять.",
+                    message="В русской прозе есть санскритская диакритика.",
+                    suggestion="Если это не шлока и не самостоятельная санскритская цитата, снять диакритику по принятому русскому стандарту.",
                     story_label=story_label,
+                    metadata={
+                        "paragraph_index": block.index,
+                        "part": block.part,
+                        "style_name": block.style_name,
+                        "block_kind": block.kind,
+                        "diacritic_decision": diacritic_decision.to_dict(),
+                    },
                 )
             )
         if block.word_count >= 14 and not PROSE_TERMINAL_PUNCT_RE.search(normalized):
@@ -273,6 +284,59 @@ def analyze_block(block: Block, story_label: str, issue_counter: List[int]) -> L
     return issues
 
 
+def build_glossary_policy_issues(
+    blocks: Sequence[Block],
+    *,
+    glossary_approved: Optional[Path],
+    story_label: str,
+    issue_counter: List[int],
+) -> List[Dict[str, object]]:
+    glossary_entries = load_glossary_policy(glossary_approved)
+    if not glossary_entries:
+        return []
+
+    issues: List[Dict[str, object]] = []
+
+    def next_id() -> str:
+        issue_counter[0] += 1
+        return f"sty-{issue_counter[0]:04d}"
+
+    for block in blocks:
+        normalized = clean_text(block.text or "")
+        if not normalized:
+            continue
+        for entry in glossary_entries:
+            if not entry.discouraged_forms:
+                continue
+            for discouraged_form in entry.discouraged_forms:
+                if not contains_phrase(normalized, discouraged_form, ignore_case=False):
+                    continue
+                issues.append(
+                    issue_from_block(
+                        block,
+                        issue_id=next_id(),
+                        kind="stylistic_glossary_discouraged_form",
+                        severity="warning",
+                        title="Проверить неканоническую словарную форму",
+                        message=(
+                            "В тексте найдена форма, которую ручной BBT-backed glossary помечает "
+                            "как нежелательную.\n"
+                            f"Found: {discouraged_form}\n"
+                            f"Preferred: {entry.approved_form}"
+                        ),
+                        suggestion="Сверить написание с glossary policy и заменить на каноническую форму, если это не особый случай.",
+                        story_label=story_label,
+                        metadata={
+                            "approved_form": entry.approved_form,
+                            "discouraged_form": discouraged_form,
+                            "glossary_entry_id": entry.entry_id,
+                            "category": entry.category,
+                        },
+                    )
+                )
+    return issues
+
+
 def dedupe_issues(issues: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
     seen = set()
     out: List[Dict[str, object]] = []
@@ -282,6 +346,7 @@ def dedupe_issues(issues: Iterable[Dict[str, object]]) -> List[Dict[str, object]
             str(item.get("kind") or ""),
             str(anchor.get("part") or ""),
             int(anchor.get("paragraph_index") or 0),
+            clean_text(str(item.get("message") or "")).casefold(),
         )
         if key in seen:
             continue
@@ -298,7 +363,12 @@ def summarize_kinds(issues: Sequence[Dict[str, object]]) -> Dict[str, int]:
     return counts
 
 
-def review_file(target_path: Path, *, story_label: str = "main_story") -> Dict[str, object]:
+def review_file(
+    target_path: Path,
+    *,
+    story_label: str = "main_story",
+    glossary_approved: Optional[Path] = None,
+) -> Dict[str, object]:
     resolved_items: List[ResolvedInput] = []
     try:
         target_doc = load_resolved_input(target_path)
@@ -307,6 +377,14 @@ def review_file(target_path: Path, *, story_label: str = "main_story") -> Dict[s
         issues: List[Dict[str, object]] = []
         for block in target_doc.blocks:
             issues.extend(analyze_block(block, story_label, counter))
+        issues.extend(
+            build_glossary_policy_issues(
+                target_doc.blocks,
+                glossary_approved=glossary_approved,
+                story_label=story_label,
+                issue_counter=counter,
+            )
+        )
         issues = dedupe_issues(issues)
         return {
             "version": 1,
@@ -317,6 +395,7 @@ def review_file(target_path: Path, *, story_label: str = "main_story") -> Dict[s
                 "issues": len(issues),
                 "target_blocks": len(target_doc.blocks),
                 "issue_kinds": summarize_kinds(issues),
+                "glossary_policy_entries": len(load_glossary_policy(glossary_approved)),
             },
             "issues": issues,
         }
@@ -337,12 +416,19 @@ def list_candidate_files(path: Path) -> List[Path]:
     ]
 
 
-def review_dir(target_dir: Path, output_dir: Path, *, story_label: str = "main_story", write_bundles: bool = False) -> Dict[str, object]:
+def review_dir(
+    target_dir: Path,
+    output_dir: Path,
+    *,
+    story_label: str = "main_story",
+    glossary_approved: Optional[Path] = None,
+    write_bundles: bool = False,
+) -> Dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
     target_files = {numbered_stem(path): path for path in list_candidate_files(target_dir)}
     chapters = []
     for key in sorted(target_files):
-        report = review_file(target_files[key], story_label=story_label)
+        report = review_file(target_files[key], story_label=story_label, glossary_approved=glossary_approved)
         write_report_json(output_dir / f"{key}.json", report)
         write_report_md(
             output_dir / f"{key}.md",
@@ -352,6 +438,7 @@ def review_dir(target_dir: Path, output_dir: Path, *, story_label: str = "main_s
                 "",
                 f"- issues: {report['summary']['issues']}",
                 f"- issue_kinds: {report['summary']['issue_kinds']}",
+                f"- glossary_policy_entries: {report['summary']['glossary_policy_entries']}",
             ],
             issues=report["issues"],
         )
@@ -371,6 +458,10 @@ def review_dir(target_dir: Path, output_dir: Path, *, story_label: str = "main_s
         "target_dir": str(target_dir),
         "chapters": chapters,
     }
+    total_issues = sum(int(chapter["issue_count"]) for chapter in chapters)
+    total_issue_kinds: Counter[str] = Counter()
+    for chapter in chapters:
+        total_issue_kinds.update(chapter["issue_kinds"])
     write_report_json(output_dir / "index.json", index)
     write_report_md(
         output_dir / "index.md",
@@ -379,6 +470,8 @@ def review_dir(target_dir: Path, output_dir: Path, *, story_label: str = "main_s
             f"Target dir: `{target_dir}`",
             "",
             f"- compared: {len(chapters)}",
+            f"- total_issues: {total_issues}",
+            f"- issue_kinds: {dict(total_issue_kinds)}",
         ],
         issues=[],
         max_issue_lines=0,
@@ -393,6 +486,7 @@ def build_parser() -> argparse.ArgumentParser:
     review = sub.add_parser("review", help="review one target file")
     review.add_argument("target")
     review.add_argument("--story-label", default="main_story")
+    review.add_argument("--glossary-approved")
     review.add_argument("--report-json")
     review.add_argument("--report-md")
     review.add_argument("--bundle-json")
@@ -401,6 +495,7 @@ def build_parser() -> argparse.ArgumentParser:
     review_dir_cmd.add_argument("target_dir")
     review_dir_cmd.add_argument("output_dir")
     review_dir_cmd.add_argument("--story-label", default="main_story")
+    review_dir_cmd.add_argument("--glossary-approved")
     review_dir_cmd.add_argument("--write-bundles", action="store_true")
     return parser
 
@@ -410,7 +505,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "review":
-        report = review_file(Path(args.target), story_label=args.story_label)
+        report = review_file(
+            Path(args.target),
+            story_label=args.story_label,
+            glossary_approved=Path(args.glossary_approved) if args.glossary_approved else None,
+        )
         if args.report_json:
             write_report_json(Path(args.report_json), report)
         if args.report_md:
@@ -422,6 +521,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "",
                     f"- issues: {report['summary']['issues']}",
                     f"- issue_kinds: {report['summary']['issue_kinds']}",
+                    f"- glossary_policy_entries: {report['summary']['glossary_policy_entries']}",
                 ],
                 issues=report["issues"],
             )
@@ -435,6 +535,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             Path(args.target_dir),
             Path(args.output_dir),
             story_label=args.story_label,
+            glossary_approved=Path(args.glossary_approved) if args.glossary_approved else None,
             write_bundles=args.write_bundles,
         )
         write_json_stdout(index)

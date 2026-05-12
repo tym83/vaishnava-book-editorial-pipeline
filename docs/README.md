@@ -4,6 +4,11 @@ This directory is the GitHub-friendly entry point into the project documentation
 
 ## Start Here
 
+- [../SESSION_HANDOFF.md](../SESSION_HANDOFF.md)
+- [../AGENTS.md](../AGENTS.md)
+- [../PROJECT_STATUS.md](../PROJECT_STATUS.md)
+- [../NEXT_STEPS.md](../NEXT_STEPS.md)
+
 - [GETTING_STARTED.md](./GETTING_STARTED.md)
 - [REPOSITORY_STRUCTURE.md](./REPOSITORY_STRUCTURE.md)
 - [SCRIPT_CATALOG.md](./SCRIPT_CATALOG.md)
@@ -47,4 +52,3 @@ These files still live in the repository root and remain useful:
 
 New short-form onboarding and repository docs should go into `docs/`.  
 Long-form design/spec documents can remain in the root until a deliberate migration is done.
-

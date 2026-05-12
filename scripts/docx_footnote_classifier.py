@@ -3,13 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Semantic footnote classifier for DOCX files.
+Footnote style normalizer for DOCX files.
 
-Working semantic map:
-- Сноска 1: explanatory / glossary / contextual note
-- Сноска 2: source / bibliographic / scripture reference
-- Сноска 3: translator note
-- Сноска 4: cross-reference / editorial linkage to another place in the book/corpus
+Current working rule:
+- all footnote text uses one paragraph style: Сноска
+- legacy styles Сноска 1/2/3/4 are accepted as input and collapsed to Сноска
 
 Examples:
   python3 docx_footnote_classifier.py classify in.docx out.docx
@@ -40,11 +38,9 @@ NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
 
 CANONICAL_FOOTNOTE_STYLES = [
-    "Сноска 1",
-    "Сноска 2",
-    "Сноска 3",
-    "Сноска 4",
+    "Сноска",
 ]
+LEGACY_FOOTNOTE_STYLES = {"Сноска 1", "Сноска 2", "Сноска 3", "Сноска 4"}
 
 TRANSLATOR_NOTE_PATTERN = re.compile(r"(?i)\bприм\.\s*переводчика\b")
 EDITOR_NOTE_PATTERN = re.compile(r"(?i)\bприм\.\s*ред\.")
@@ -97,6 +93,7 @@ class HintRule:
 
 @dataclass
 class FootnoteInfo:
+    part_name: str
     footnote_id: str
     text: str
     old_styles: List[str]
@@ -303,21 +300,36 @@ def set_paragraph_style(p, style_id: str) -> None:
     pstyle.set(f"{W}val", style_id)
 
 
-def iter_footnotes(root, catalog: StyleCatalog, default_name: Optional[str]) -> List[FootnoteInfo]:
+def iter_footnotes(
+    root,
+    catalog: StyleCatalog,
+    default_name: Optional[str],
+    *,
+    part_name: str = "word/footnotes.xml",
+    note_tag: str = "footnote",
+) -> List[FootnoteInfo]:
     notes: List[FootnoteInfo] = []
-    for fn in root.xpath(".//w:footnote[not(@w:type)]", namespaces=NS):
+    for fn in root.xpath(f".//w:{note_tag}[not(@w:type)]", namespaces=NS):
         fid = fn.get(f"{W}id") or ""
         paras: List[etree._Element] = []
         texts: List[str] = []
         styles: List[str] = []
         for para in fn.findall("w:p", namespaces=NS):
+            paras.append(para)
             text = "".join(t.text or "" for t in para.findall(".//w:t", namespaces=NS)).strip()
             if text:
-                paras.append(para)
                 texts.append(text)
                 styles.append(get_paragraph_style_name(para, catalog, default_name) or "")
         if texts:
-            notes.append(FootnoteInfo(footnote_id=fid, text=" | ".join(texts), old_styles=styles, paragraphs=paras))
+            notes.append(
+                FootnoteInfo(
+                    part_name=part_name,
+                    footnote_id=f"{part_name}:{fid}",
+                    text=" | ".join(texts),
+                    old_styles=styles,
+                    paragraphs=paras,
+                )
+            )
     return notes
 
 
@@ -356,29 +368,10 @@ def looks_like_cross_reference(text: str) -> bool:
 
 
 def infer_class(text: str) -> tuple[str, str, str]:
-    t = clean_text(text)
-    if looks_like_translator_note(t):
-        return ("Сноска 3", "translator_note", "explicit-translator-note")
-    if looks_like_cross_reference(t):
-        return ("Сноска 4", "cross_reference", "cross-reference-pattern")
-    if looks_like_pure_source_reference(t):
-        return ("Сноска 2", "source_reference", "source-reference-pattern")
-    return ("Сноска 1", "explanatory_note", "default-explanatory")
+    return ("Сноска", "footnote", "single-footnote-style")
 
 
 def needs_review(text: str, style: str) -> bool:
-    if style != "Сноска 1":
-        return False
-    t = clean_text(text)
-    if len(t.split()) <= 3:
-        return True
-    if "|" in t and re.search(r"\d", t):
-        return True
-    if (
-        re.search(r"\b(ШБ|БГ|Чч|Ав|Гв|Сдж|ШБТ|УШЧ|Патр)\b", t, flags=re.IGNORECASE)
-        and re.search(r"\d", t)
-    ):
-        return True
     return False
 
 
@@ -407,12 +400,13 @@ def classify_footnotes(notes: Sequence[FootnoteInfo], hint_rules: Optional[Seque
                 )
                 continue
             if hint.action == "set_style" and hint.style:
+                new_style = "Сноска" if hint.style in LEGACY_FOOTNOTE_STYLES else hint.style
                 applied.append(
                     Decision(
                         footnote_id=note.footnote_id,
                         text=clean_text(note.text),
                         old_styles=note.old_styles,
-                        new_style=hint.style,
+                        new_style=new_style,
                         class_name="hint",
                         confidence="hint",
                         reason=f"hint:{hint.note or hint.match_type}",
@@ -422,7 +416,7 @@ def classify_footnotes(notes: Sequence[FootnoteInfo], hint_rules: Optional[Seque
                 continue
 
         new_style, class_name, reason = infer_class(note.text)
-        confidence = "high" if new_style in {"Сноска 2", "Сноска 3"} else "medium"
+        confidence = "high"
         applied.append(
             Decision(
                 footnote_id=note.footnote_id,
@@ -518,19 +512,55 @@ def classify_docx(
     hint_rules: Optional[Sequence[HintRule]] = None,
 ) -> dict:
     with zipfile.ZipFile(src, "r") as zin:
+        note_parts = {
+            "word/footnotes.xml": "footnote",
+            "word/endnotes.xml": "endnote",
+        }
+        available_note_parts = [part for part in note_parts if part in zin.namelist()]
+        if not available_note_parts:
+            shutil.copyfile(src, out)
+            summary = {
+                "input": str(src),
+                "output": str(out),
+                "counts_by_style": {},
+                "applied": [],
+                "review": [],
+                "note": "No word/footnotes.xml part found; copied input unchanged.",
+            }
+            if report_json:
+                report_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            if report_md:
+                write_report_md(report_md, summary)
+            return summary
         styles_root = etree.fromstring(zin.read("word/styles.xml"))
         catalog = StyleCatalog(styles_root)
         canonical_ids = ensure_canonical_styles(catalog)
         default_name = catalog.default_style_name("paragraph")
-        foot_root = etree.fromstring(zin.read("word/footnotes.xml"))
-        notes = iter_footnotes(foot_root, catalog, default_name)
+        note_roots = {
+            part_name: etree.fromstring(zin.read(part_name))
+            for part_name in available_note_parts
+        }
+        notes: List[FootnoteInfo] = []
+        for part_name, root in note_roots.items():
+            notes.extend(
+                iter_footnotes(
+                    root,
+                    catalog,
+                    default_name,
+                    part_name=part_name,
+                    note_tag=note_parts[part_name],
+                )
+            )
         applied, review = classify_footnotes(notes, hint_rules=hint_rules)
 
         note_by_id = {n.footnote_id: n for n in notes}
         for item in applied:
             if not item.new_style:
                 continue
-            style_id = canonical_ids[item.new_style]
+            target_style = "Сноска" if item.new_style in LEGACY_FOOTNOTE_STYLES else item.new_style
+            if target_style not in canonical_ids:
+                target_style = "Сноска"
+            style_id = canonical_ids[target_style]
             note = note_by_id.get(item.footnote_id)
             if note is None:
                 continue
@@ -540,8 +570,13 @@ def classify_docx(
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
             for info in zin.infolist():
                 data = zin.read(info.filename)
-                if info.filename == "word/footnotes.xml":
-                    data = etree.tostring(foot_root, encoding="utf-8", xml_declaration=True, standalone="yes")
+                if info.filename in note_roots:
+                    data = etree.tostring(
+                        note_roots[info.filename],
+                        encoding="utf-8",
+                        xml_declaration=True,
+                        standalone="yes",
+                    )
                 elif info.filename == "word/styles.xml":
                     data = etree.tostring(styles_root, encoding="utf-8", xml_declaration=True, standalone="yes")
                 zout.writestr(info, data)
@@ -564,7 +599,7 @@ def classify_docx(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Classify DOCX footnotes into canonical footnote styles")
+    parser = argparse.ArgumentParser(description="Normalize DOCX footnotes into the canonical footnote style")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_classify = sub.add_parser("classify", help="classify footnotes and write a new docx")

@@ -45,6 +45,9 @@ PARA_TAG = qn("w:p")
 TBL_TAG = qn("w:tbl")
 SECTPR_TAG = qn("w:sectPr")
 TEXT_TAG = qn("w:t")
+TAB_TAG = qn("w:tab")
+BR_TAG = qn("w:br")
+CR_TAG = qn("w:cr")
 PSTYLE_TAG = qn("w:pStyle")
 
 
@@ -71,7 +74,15 @@ def normalize_text(text: str) -> str:
 
 
 def visible_text_for_xml(node) -> str:
-    return "".join(t.text for t in node.iter(TEXT_TAG) if t.text)
+    parts: List[str] = []
+    for child in node.iter():
+        if child.tag == TEXT_TAG and child.text:
+            parts.append(child.text)
+        elif child.tag == TAB_TAG:
+            parts.append("\t")
+        elif child.tag in {BR_TAG, CR_TAG}:
+            parts.append("\n")
+    return "".join(parts)
 
 
 def style_id_to_name_map(doc: Document) -> dict:
@@ -211,6 +222,27 @@ def dedupe_preserve_order(lines: Sequence[str]) -> List[str]:
     return out
 
 
+def strip_docx_toc_entry(text: str) -> Optional[str]:
+    text = text.replace("\u00a0", " ").replace("\u200b", " ").replace("\ufeff", " ")
+    text = re.sub(r"[ ]+", " ", text.strip())
+    if not text:
+        return None
+
+    if "\t" in text:
+        title = text.rsplit("\t", 1)[0].strip()
+    else:
+        title = text
+        title = re.sub(r"[.\-•·_]+\s*(\d+|[ivxlcdm]+)\s*$", "", title, flags=re.IGNORECASE).strip()
+        title = re.sub(r"\s+(\d+|[ivxlcdm]+)\s*$", "", title, flags=re.IGNORECASE).strip()
+        glued_page = re.match(r"^(.+\D)(\d{1,4})$", title)
+        if glued_page:
+            title = glued_page.group(1).strip()
+
+    title = re.sub(r"[.\-•·_]+$", "", title).strip()
+    title = re.sub(r"\s+", " ", title)
+    return title or None
+
+
 def clean_pdf_line(text: str) -> str:
     text = text.replace("\x0c", " ").replace("\x08", " ")
     text = text.replace("\ufffd", " ")
@@ -280,7 +312,12 @@ def extract_titles_from_docx_toc(
     for block in blocks:
         if block.index <= toc_start or block.kind != "p":
             continue
-        text = re.sub(r"\s+", " ", block.text.strip())
+        text = strip_docx_toc_entry(block.text)
+        if not text:
+            if collecting:
+                stop_index = block.index
+                break
+            continue
         if not collecting:
             if is_title_candidate(text, max_len=max_len):
                 collecting = True
