@@ -11,6 +11,7 @@ v1 scope:
 - assign H1 from TOC titles when possible
 - convert manual italic/bold to character styles
 - make default/unstyled body paragraphs explicit as "Основной текст"
+- leave footnote/endnote paragraph semantics to docx_footnote_classifier.py
 
 Examples:
   python3 docx_style_normalizer.py normalize in.docx out.docx
@@ -51,10 +52,7 @@ CANONICAL_PARAGRAPH_STYLES = [
     "Письмо",
     "Источник",
     "Подпись к иллюстрации",
-    "Сноска 1",
-    "Сноска 2",
-    "Сноска 3",
-    "Сноска 4",
+    "Сноска",
     "Список нумерованный 1",
     "Список нумерованный 2",
     "Список ненумерованный 1",
@@ -71,12 +69,15 @@ DEFAULT_STYLE_NAME_MAP = {
     "normal": "Основной текст",
     "normal (web)": "Основной текст",
     "no spacing": "Основной текст",
+    "текст": "Основной текст",
+    "body text": "Основной текст",
     "без интервала1": "Основной текст",
     "heading 1": "Заголовок 1",
     "heading 2": "Заголовок 2",
     "heading 3": "Заголовок 3",
     "heading 4": "Заголовок 4",
-    "footnote text": "Сноска 1",
+    "footnote text": "Сноска",
+    "endnote text": "Сноска",
     "sloka": "Шлока",
     "шлока санскрит": "Шлока",
     "шлока перевод": "Перевод шлоки",
@@ -209,13 +210,17 @@ class StyleCatalog:
         self.root = root
         self.by_id: Dict[str, etree._Element] = {}
         self.by_name: Dict[str, etree._Element] = {}
+        self.by_name_norm: Dict[str, etree._Element] = {}
         self.default_by_type: Dict[str, etree._Element] = {}
+        self.first_by_type: Dict[str, etree._Element] = {}
         self._rebuild()
 
     def _rebuild(self) -> None:
         self.by_id.clear()
         self.by_name.clear()
+        self.by_name_norm.clear()
         self.default_by_type.clear()
+        self.first_by_type.clear()
         for style in self.root.xpath(".//w:style", namespaces=NS):
             style_id = style.get(f"{W}styleId")
             style_type = style.get(f"{W}type") or "unknown"
@@ -225,8 +230,18 @@ class StyleCatalog:
                 self.by_id[style_id] = style
             if name:
                 self.by_name[name] = style
+                self.by_name_norm.setdefault(normalize_text(name), style)
+            self.first_by_type.setdefault(style_type, style)
             if style.get(f"{W}default") in {"1", "true", "True"} and style_type not in self.default_by_type:
                 self.default_by_type[style_type] = style
+
+    def by_style_name(self, name: Optional[str]):
+        if not name:
+            return None
+        exact = self.by_name.get(name)
+        if exact is not None:
+            return exact
+        return self.by_name_norm.get(normalize_text(name))
 
     def style_name(self, style_id: Optional[str]) -> Optional[str]:
         if not style_id:
@@ -269,13 +284,15 @@ class StyleCatalog:
         return rpr
 
     def ensure_style(self, target_name: str, style_type: str, base_name: Optional[str] = None) -> str:
-        existing = self.by_name.get(target_name)
+        existing = self.by_style_name(target_name)
         if existing is not None:
             return existing.get(f"{W}styleId")
 
-        base = self.by_name.get(base_name) if base_name else None
+        base = self.by_style_name(base_name) if base_name else None
         if base is None:
             base = self.default_by_type.get(style_type)
+        if base is None:
+            base = self.first_by_type.get(style_type)
         if base is None:
             die(f"No base style available to create {target_name}")
 
@@ -361,6 +378,10 @@ def iter_paragraphs_for_part(part_name: str, root) -> List[etree._Element]:
     if part_name == "word/endnotes.xml":
         return root.xpath(".//w:endnote[not(@w:type)]//w:p", namespaces=NS)
     return root.xpath(".//w:p", namespaces=NS)
+
+
+def is_note_part(part_name: str) -> bool:
+    return part_name in {"word/footnotes.xml", "word/endnotes.xml"}
 
 
 def get_paragraph_style_name(p, catalog: StyleCatalog, default_name: Optional[str]) -> Optional[str]:
@@ -508,7 +529,7 @@ def ensure_canonical_styles(catalog: StyleCatalog) -> Dict[str, str]:
         "Заголовок 2": "heading 2",
         "Заголовок 3": "heading 3",
         "Заголовок 4": "heading 4",
-        "Сноска 1": "footnote text",
+        "Сноска": "footnote text",
         "Char Курсив": "Default Paragraph Font",
         "Char Полужирный": "Default Paragraph Font",
     }
@@ -571,11 +592,19 @@ def normalize_docx(src: Path, out: Path, toc_markers: Sequence[str], extra_maps:
         converted_manual_italic = 0
         converted_manual_bold = 0
         skipped_combined_emphasis = 0
+        preserved_note_paragraph_styles = 0
 
         for part_name, root in part_roots.items():
             for p in iter_paragraphs_for_part(part_name, root):
                 current_name = get_paragraph_style_name(p, catalog, default_paragraph_name)
-                target_name = style_map.get(normalize_text(current_name or ""))
+                target_name = None
+                if is_note_part(part_name):
+                    # Footnotes in Vaibhava use several semantic note types, often all
+                    # hidden behind No Spacing/footnote text. Do not collapse them to
+                    # body text here; docx_footnote_classifier owns that decision.
+                    preserved_note_paragraph_styles += 1
+                else:
+                    target_name = style_map.get(normalize_text(current_name or ""))
                 if target_name:
                     target_id = canonical_ids.get(target_name)
                     if target_id:
@@ -647,6 +676,7 @@ def normalize_docx(src: Path, out: Path, toc_markers: Sequence[str], extra_maps:
         "converted_manual_italic": converted_manual_italic,
         "converted_manual_bold": converted_manual_bold,
         "skipped_combined_emphasis": skipped_combined_emphasis,
+        "preserved_note_paragraph_styles": preserved_note_paragraph_styles,
         "created_styles": list(canonical_ids.keys()),
     }
 
@@ -663,6 +693,7 @@ def cmd_normalize(args) -> None:
         print(f"Manual italic -> Char Курсив: {summary['converted_manual_italic']}")
         print(f"Manual bold -> Char Полужирный: {summary['converted_manual_bold']}")
         print(f"Skipped combined bold+italic runs: {summary['skipped_combined_emphasis']}")
+        print(f"Preserved note paragraph styles: {summary['preserved_note_paragraph_styles']}")
     finally:
         cleanup_temp(temp_dir)
 

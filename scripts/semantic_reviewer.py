@@ -447,8 +447,8 @@ def review_dirs(
     write_bundles: bool = False,
 ) -> Dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    source_files = {numbered_stem(path): path for path in list_candidate_files(source_dir)}
-    target_files = {numbered_stem(path): path for path in list_candidate_files(target_dir)}
+    source_files = {numbered_stem(path): path for path in list_candidate_files(source_dir) if re.match(r"^\d{3}", path.stem)}
+    target_files = {numbered_stem(path): path for path in list_candidate_files(target_dir) if re.match(r"^\d{3}", path.stem)}
     common = sorted(set(source_files) & set(target_files))
     source_only = sorted(set(source_files) - set(target_files))
     target_only = sorted(set(target_files) - set(source_files))

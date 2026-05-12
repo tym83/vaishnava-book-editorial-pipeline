@@ -42,6 +42,7 @@ from glossary_policy import contains_phrase, load_glossary_policy
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
+DEFAULT_FONT = "Charis SIL"
 
 
 CANONICAL_PARAGRAPH_STYLES = [
@@ -57,10 +58,7 @@ CANONICAL_PARAGRAPH_STYLES = [
     "Письмо",
     "Источник",
     "Подпись к иллюстрации",
-    "Сноска 1",
-    "Сноска 2",
-    "Сноска 3",
-    "Сноска 4",
+    "Сноска",
     "Список нумерованный 1",
     "Список нумерованный 2",
     "Список ненумерованный 1",
@@ -72,6 +70,11 @@ CANONICAL_CHARACTER_STYLES = [
     "Char Курсив",
     "Char Полужирный",
 ]
+
+SYSTEM_CHARACTER_STYLES = {
+    "Endnote Reference",
+    "Footnote Reference",
+}
 
 PARA_OVERRIDE_TAGS = {
     "adjustRightInd",
@@ -340,6 +343,68 @@ def run_fonts(r) -> List[str]:
     return sorted(set(names))
 
 
+def rfonts_values(rfonts) -> Dict[str, str]:
+    if rfonts is None:
+        return {}
+    return {
+        attr: rfonts.get(f"{W}{attr}")
+        for attr in ("ascii", "hAnsi", "cs", "eastAsia")
+        if rfonts.get(f"{W}{attr}")
+    }
+
+
+def unexpected_font_attrs(values: Dict[str, str]) -> Dict[str, str]:
+    expected_attrs = ("ascii", "hAnsi", "cs", "eastAsia")
+    return {
+        attr: values.get(attr, "<missing>")
+        for attr in expected_attrs
+        if values.get(attr) != DEFAULT_FONT
+    }
+
+
+def audit_style_fonts(docx_path: Path) -> List[Issue]:
+    with zipfile.ZipFile(docx_path, "r") as z:
+        try:
+            root = etree.fromstring(z.read("word/styles.xml"))
+        except KeyError:
+            die("word/styles.xml not found in docx")
+
+    issues: List[Issue] = []
+    defaults_rfonts = root.find("w:docDefaults/w:rPrDefault/w:rPr/w:rFonts", namespaces=NS)
+    defaults_bad = unexpected_font_attrs(rfonts_values(defaults_rfonts))
+    if defaults_bad:
+        issues.append(
+            Issue(
+                kind="style_unexpected_font",
+                severity="warning",
+                part="styles",
+                paragraph_index=0,
+                excerpt="docDefaults",
+                details={"expected_font": DEFAULT_FONT, "fonts": defaults_bad},
+            )
+        )
+
+    for style in root.xpath(".//w:style[@w:type='paragraph' or @w:type='character']", namespaces=NS):
+        style_id = style.get(f"{W}styleId")
+        name_node = style.find("w:name", namespaces=NS)
+        name = name_node.get(f"{W}val") if name_node is not None else style_id
+        values = rfonts_values(style.find("w:rPr/w:rFonts", namespaces=NS))
+        bad = unexpected_font_attrs(values)
+        if not bad:
+            continue
+        issues.append(
+            Issue(
+                kind="style_unexpected_font",
+                severity="warning",
+                part="styles",
+                paragraph_index=0,
+                excerpt=name or style_id or "<unnamed>",
+                details={"expected_font": DEFAULT_FONT, "style_id": style_id, "fonts": bad},
+            )
+        )
+    return issues
+
+
 def run_is_italic(r_style_name: Optional[str], r_overrides: List[str]) -> bool:
     return r_style_name == "Char Курсив" or "i" in r_overrides or "iCs" in r_overrides
 
@@ -360,7 +425,8 @@ def audit_docx(docx_path: Path, glossary_approved: Optional[Path] = None) -> dic
     direct_paragraph_overrides = Counter()
     direct_run_overrides = Counter()
     gaura_font_runs = 0
-    issues: List[Issue] = []
+    style_font_issues = audit_style_fonts(docx_path)
+    issues: List[Issue] = list(style_font_issues)
 
     with zipfile.ZipFile(docx_path, "r") as z:
         for part_name, root in iter_story_parts(z):
@@ -546,7 +612,9 @@ def audit_docx(docx_path: Path, glossary_approved: Optional[Path] = None) -> dic
         name for name in used_paragraph_styles if name and name not in CANONICAL_PARAGRAPH_STYLES
     )
     noncanonical_used_character_styles = sorted(
-        name for name in used_character_styles if name and name not in CANONICAL_CHARACTER_STYLES
+        name
+        for name in used_character_styles
+        if name and name not in CANONICAL_CHARACTER_STYLES and name not in SYSTEM_CHARACTER_STYLES
     )
 
     for name in noncanonical_used_paragraph_styles:
@@ -584,6 +652,7 @@ def audit_docx(docx_path: Path, glossary_approved: Optional[Path] = None) -> dic
         "noncanonical_used_character_styles": noncanonical_used_character_styles,
         "direct_paragraph_overrides": dict(sorted(direct_paragraph_overrides.items())),
         "direct_run_overrides": dict(sorted(direct_run_overrides.items())),
+        "style_font_issues": [asdict(issue) for issue in style_font_issues],
         "gaura_font_runs": gaura_font_runs,
         "glossary_policy_entries": len(glossary_entries),
         "issues": [asdict(issue) for issue in issues],
@@ -619,6 +688,13 @@ def write_markdown_report(result: dict, out_path: Path, max_issue_lines: int = 2
     add_counter("Used Character Styles", result["used_character_styles"])
     add_counter("Direct Paragraph Overrides", result["direct_paragraph_overrides"])
     add_counter("Direct Run Overrides", result["direct_run_overrides"])
+    lines.append("## Style Font Issues\n")
+    if not result.get("style_font_issues"):
+        lines.append("- none\n")
+    else:
+        for issue in result["style_font_issues"]:
+            details = json.dumps(issue["details"], ensure_ascii=False, sort_keys=True)
+            lines.append(f"- `{issue['excerpt']}` {details}\n")
     lines.append("## Gaura Times Runs\n")
     lines.append(f"- {result['gaura_font_runs']}\n")
     lines.append("## Glossary Policy Entries\n")
@@ -651,6 +727,7 @@ def print_summary(result: dict) -> None:
     print(f"Used character styles: {len(result['used_character_styles'])}")
     print(f"Direct paragraph override tags: {sum(result['direct_paragraph_overrides'].values())}")
     print(f"Direct run override tags: {sum(result['direct_run_overrides'].values())}")
+    print(f"Style font issues: {len(result.get('style_font_issues', []))}")
     print(f"Gaura Times runs: {result['gaura_font_runs']}")
     print(f"Glossary policy entries: {result.get('glossary_policy_entries', 0)}")
     print(f"Issues: {len(result['issues'])}")

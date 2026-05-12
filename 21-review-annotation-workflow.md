@@ -135,6 +135,7 @@ python3 review_issue_bundle.py merge \
 
 Скрипт:
 
+- [all_review_docx_builder.py](/home/tym83/Загрузки/Служение/Automate/scripts/all_review_docx_builder.py) — финальный сборщик одного `*.all-review.docx`;
 - [docx_comment_applier.py](/home/tym83/Загрузки/Служение/Automate/scripts/docx_comment_applier.py)
 
 ### Что делает
@@ -159,6 +160,55 @@ python3 docx_comment_applier.py apply \
 - редактура в Word;
 - корректура в Word;
 - полнота перевода и style audit на `docx`.
+
+### Правило для EN/RU translation review
+
+Для редактора основной результат проверки перевода — полный `DOCX` книги с Word-комментариями. Внешние `md/json` отчеты являются логом, но не заменяют annotated DOCX.
+
+Итоговый файл для ручной работы редактора должен быть один: `*.all-review.docx`. В нем должны быть объединены все слои комментариев:
+
+- корректура;
+- стилевые и структурные замечания;
+- semantic-style candidates;
+- поверхностная сверка;
+- глубокое EN/RU translation review.
+
+Файлы `review/deep_packs/*.md`, промежуточные issue bundles и отдельные `review-comments`/`master-review` имена не должны создавать параллельные рабочие версии. Если такие имена сохраняются для совместимости, они должны быть синхронизированы с `*.all-review.docx`.
+
+Если проверка велась по chapter/section packs:
+
+1. собрать findings в `issue bundle`;
+2. привязать anchors к абзацам полного DOCX;
+3. собрать итоговый файл через `all_review_docx_builder.py build`;
+4. при необходимости передать legacy-имена через `--legacy-copy`;
+5. проверить `applied/skipped`; skipped должен быть `0` перед передачей файла редактору.
+
+### Layered review passes
+
+Повторные прогоны не должны удалять предыдущие комментарии. Новый проход фиксируется отдельным findings-файлом и подключается в сборщик поверх старых findings.
+
+Текущий пример для Vaibhava Tom 1:
+
+- base/pilot findings живут в [scripts/vibhava_review_comment_bundle.py](./scripts/vibhava_review_comment_bundle.py);
+- первый расширенный слой живет в [docs/vibhava_tom1_review_findings_extra.json](./docs/vibhava_tom1_review_findings_extra.json);
+- второй глубокий prose-review слой живет в [docs/vibhava_tom1_review_findings_deep_prose.json](./docs/vibhava_tom1_review_findings_deep_prose.json);
+- итоговый DOCX должен собираться заново из чистого style-enforced DOCX, а не путем редактирования уже прокомментированного файла;
+- после сборки обязательно проверить `applied/skipped`, количество `w:comment`, `w:commentReference`, `w:commentRangeStart`, `w:commentRangeEnd`; все четыре счетчика должны совпадать.
+
+Каждый комментарий должен содержать:
+
+- тип проблемы;
+- почему это проблема;
+- suggested fix.
+
+### Feedback loop
+
+После ручных правок редактора:
+
+- принятые терминологические решения переносятся в glossary;
+- повторяемые правила переносятся в `18-editor-decisions-log.md` и style/workflow docs;
+- rejected/false-positive comments фиксируются, чтобы не повторять их в следующем прогоне;
+- простой diff полезен как материал, но не заменяет явную фиксацию решений.
 
 ---
 

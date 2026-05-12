@@ -46,6 +46,7 @@ LEGACY_CHAR_MAP: Dict[str, str] = {
     "\uf115": "р̣",  # ṛ
     "\uf11b": "х̣",  # ḥ
     "\uf11d": "ш́",  # ś
+    "\uf0be": "—",
 }
 
 # Real Unicode chars seen in the corpus that are valid and should be preserved.

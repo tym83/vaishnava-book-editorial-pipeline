@@ -1,6 +1,6 @@
 # Project Status
 
-Snapshot date: `2026-05-03`
+Snapshot date: `2026-05-11`
 
 ## Repository State
 
@@ -29,6 +29,7 @@ Core deterministic modules already exist and are usable:
 - [scripts/stylistic_reviewer.py](./scripts/stylistic_reviewer.py)
 - [scripts/docx_style_audit.py](./scripts/docx_style_audit.py)
 - [scripts/editorial_pipeline.py](./scripts/editorial_pipeline.py)
+- [scripts/all_review_docx_builder.py](./scripts/all_review_docx_builder.py)
 - [scripts/docx_comment_applier.py](./scripts/docx_comment_applier.py)
 - [scripts/word_to_indesign_import.jsx](./scripts/word_to_indesign_import.jsx)
 - [scripts/indesign_layout_qa.jsx](./scripts/indesign_layout_qa.jsx)
@@ -52,6 +53,22 @@ What changed recently:
   - [scripts/stylistic_reviewer.py](./scripts/stylistic_reviewer.py)
   - [scripts/docx_style_audit.py](./scripts/docx_style_audit.py)
   - [scripts/editorial_pipeline.py](./scripts/editorial_pipeline.py)
+
+Additional Vaibhava DOCX calibration:
+
+- [scripts/docx_style_normalizer.py](./scripts/docx_style_normalizer.py) no longer collapses footnote/endnote paragraphs into `Основной текст`; footnote semantics are left for [scripts/docx_footnote_classifier.py](./scripts/docx_footnote_classifier.py).
+- [scripts/docx_semantic_style_classifier.py](./scripts/docx_semantic_style_classifier.py) now uses visual block cues such as left indent, line breaks, and Sanskrit diacritics to assign `Шлока`, `Цитата 1`, and `Источник` before prose-dediacritizing; short caption heuristics guard against promoting image captions with diacritics to `Шлока`.
+- [scripts/docx_prose_dediacritizer.py](./scripts/docx_prose_dediacritizer.py) uses the shared Sanskrit-diacritic classifier and should run only after semantic styles are assigned.
+- [scripts/docx_style_enforcer.py](./scripts/docx_style_enforcer.py) applies canonical block geometry and removes direct `pPr/rPr` overrides for layout-ready DOCX output.
+- [scripts/vibhava_review_comment_bundle.py](./scripts/vibhava_review_comment_bundle.py) builds the Vaibhava Tom 1 Word-comment issue bundle; expanded findings are layered from [docs/vibhava_tom1_review_findings_extra.json](./docs/vibhava_tom1_review_findings_extra.json) and [docs/vibhava_tom1_review_findings_deep_prose.json](./docs/vibhava_tom1_review_findings_deep_prose.json) so each review pass can be diffed and reused without deleting previous comments.
+- [scripts/all_review_docx_builder.py](./scripts/all_review_docx_builder.py) is now the final DOCX aggregation step: it merges all issue bundles, applies Word comments, verifies `skipped == 0`, checks the actual `w:comment` count, and writes one editor-facing `*.all-review.docx`.
+
+Current review-output convention:
+
+- `*.formatted.docx` is the clean formatted copy without comments.
+- `*.all-review.docx` is the only editor-facing working copy with all current comments.
+- `*.review-comments.docx` and `*.master-review.docx`, if produced, must be synchronized copies of `*.all-review.docx`.
+- `review/deep_packs/*.md`, issue bundles, and json/md reports are audit trail, not separate places for editor corrections.
 
 ## Glossary Snapshot
 

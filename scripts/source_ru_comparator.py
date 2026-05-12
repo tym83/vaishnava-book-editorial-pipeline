@@ -570,8 +570,8 @@ def compare_dirs(
     reference_locale: str = "ru",
 ) -> Dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    source_files = {numbered_stem(p): p for p in list_candidate_files(source_dir)}
-    target_files = {numbered_stem(p): p for p in list_candidate_files(target_dir)}
+    source_files = {numbered_stem(p): p for p in list_candidate_files(source_dir) if re.match(r"^\d{3}", p.stem)}
+    target_files = {numbered_stem(p): p for p in list_candidate_files(target_dir) if re.match(r"^\d{3}", p.stem)}
     common = sorted(set(source_files) & set(target_files))
     source_only = sorted(set(source_files) - set(target_files))
     target_only = sorted(set(target_files) - set(source_files))

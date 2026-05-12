@@ -38,6 +38,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from lxml import etree
 
+from sanskrit_diacritics import has_sanskrit_diacritics, looks_like_sanskrit_quote
+
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W_NS}
@@ -56,10 +58,7 @@ CANONICAL_PARAGRAPH_STYLES = [
     "Письмо",
     "Источник",
     "Подпись к иллюстрации",
-    "Сноска 1",
-    "Сноска 2",
-    "Сноска 3",
-    "Сноска 4",
+    "Сноска",
     "Список нумерованный 1",
     "Список нумерованный 2",
     "Список ненумерованный 1",
@@ -70,6 +69,7 @@ CANONICAL_PARAGRAPH_STYLES = [
 DEFAULT_TOC_MARKERS = ["Содержание", "Contents", "Оглавление"]
 BODYLIKE_STYLES = {"Основной текст", "Normal", "Normal (Web)"}
 COMBINING_MARKS = "\u0304\u0323\u0307\u0303\u0301"
+VISUAL_BLOCK_LEFT_TWIPS = 1000
 SCRIPTURE_PATTERN = re.compile(
     r"(?i)\b("
     r"шб|бг|чч|нп|SB|Bg|Cc|"
@@ -78,13 +78,95 @@ SCRIPTURE_PATTERN = re.compile(
     r"шри чайтанья-чаритамрита|шри чайтанья чаритамрита"
     r")\b.*\d"
 )
+QUOTED_SOURCE_REF_PATTERN = re.compile(r"^\s*«[^»]{2,80}»\s+\d")
 CAPTION_PATTERN = re.compile(
     r"(?i)^(изображени[ея]|подпись\b|подпись к изображени|подпись к изображениям|без подписи)\b"
+)
+SHORT_CAPTION_PATTERN = re.compile(
+    r"(?i)^("
+    r"ом̇\s+виш|"
+    r"первая страница|последняя страница|место явления|бхаджан-кутир|пушпа-самадхи|"
+    r"перед\s+|на\s+|во время\s+|при[её]м\s+|прибытие\s+|закладка\s+|санкиртана\s+"
+    r")"
 )
 LETTER_PATTERN = re.compile(
     r"(?i)^(дорог[а-я]+|уважаем[а-я]+|пожалуйста,\s*примите мои смиренные поклоны|ваш слуга\b|искренне ваш\b)"
 )
 ABBREV_REF_PATTERN = re.compile(r"^[А-ЯЁA-Z][А-ЯЁA-Zа-яёa-z]{0,7}:\s")
+VERSE_LABEL_PATTERN = re.compile(r"(?i)^текст\s+\d+[а-яa-z]?$")
+CYRILLIC_TRANSLIT_MARKERS = {
+    "адхокш",
+    "ананта",
+    "аравинд",
+    "асми",
+    "атма",
+    "бгаван",
+    "бхагав",
+    "бхадж",
+    "бхакт",
+    "бхри",
+    "бху",
+    "бхув",
+    "брахм",
+    "вайшнав",
+    "ванд",
+    "вишну",
+    "врадж",
+    "вринд",
+    "гатен",
+    "гаура",
+    "говинд",
+    "госвам",
+    "гуру",
+    "джай",
+    "джана",
+    "джива",
+    "дев",
+    "дой",
+    "дуратй",
+    "йа",
+    "йад",
+    "йас",
+    "йо",
+    "йукта",
+    "кали",
+    "кама",
+    "каруна",
+    "криш",
+    "кршн",
+    "локан",
+    "мад",
+    "майа",
+    "мам",
+    "ман",
+    "матах",
+    "море",
+    "нама",
+    "нирвиш",
+    "нитй",
+    "ом",
+    "пада",
+    "прабху",
+    "прабхупад",
+    "прачар",
+    "прем",
+    "са",
+    "сарасват",
+    "сарва",
+    "сев",
+    "сукх",
+    "татх",
+    "томар",
+    "твад",
+    "ха",
+    "хари",
+    "чайтан",
+    "чарана",
+    "шакти",
+    "шри",
+    "шримат",
+    "шунй",
+}
 
 
 @dataclass
@@ -93,6 +175,19 @@ class ParagraphInfo:
     text: str
     style_name: Optional[str]
     node: etree._Element
+    left_indent: int = 0
+    first_line_indent: int = 0
+    paragraph_italic: bool = False
+    italic_run_ratio: float = 0.0
+    has_break: bool = False
+
+    @property
+    def visual_indent(self) -> int:
+        return max(self.left_indent, self.left_indent + max(0, self.first_line_indent))
+
+    @property
+    def is_visual_block(self) -> bool:
+        return self.visual_indent >= VISUAL_BLOCK_LEFT_TWIPS
 
 
 @dataclass
@@ -265,18 +360,86 @@ def ensure_canonical_styles(catalog: StyleCatalog) -> Dict[str, str]:
         "Заголовок 2": "heading 2",
         "Заголовок 3": "heading 3",
         "Заголовок 4": "heading 4",
-        "Сноска 1": "footnote text",
+        "Сноска": "footnote text",
     }
     for name in CANONICAL_PARAGRAPH_STYLES:
         style_ids[name] = catalog.ensure_style(name, "paragraph", base_name=base_map.get(name))
     return style_ids
 
 
+def visible_text(p) -> str:
+    chunks = []
+    for node in p.xpath(".//w:t | .//w:tab | .//w:br | .//w:cr", namespaces=NS):
+        if node.tag == f"{W}t":
+            chunks.append(node.text or "")
+        elif node.tag == f"{W}tab":
+            chunks.append("\t")
+        else:
+            chunks.append("\n")
+    return "".join(chunks).strip()
+
+
+def int_attr(node, name: str) -> int:
+    if node is None:
+        return 0
+    raw = node.get(f"{W}{name}")
+    if raw is None:
+        return 0
+    try:
+        return int(raw)
+    except ValueError:
+        return 0
+
+
+def paragraph_indents(p) -> tuple[int, int]:
+    ind = p.find("w:pPr/w:ind", namespaces=NS)
+    return int_attr(ind, "left"), int_attr(ind, "firstLine")
+
+
+def onoff_is_true(node) -> bool:
+    if node is None:
+        return False
+    val = node.get(f"{W}val")
+    if val is None:
+        return True
+    return val not in {"0", "false", "False", "off"}
+
+
+def paragraph_has_italic(p) -> bool:
+    return any(
+        onoff_is_true(p.find(f"w:pPr/w:rPr/w:{tag}", namespaces=NS))
+        for tag in ("i", "iCs")
+    )
+
+
+def italic_ratio(p) -> float:
+    runs = p.xpath("./descendant::w:r", namespaces=NS)
+    if not runs:
+        return 0.0
+    italic_runs = 0
+    for run in runs:
+        if any(onoff_is_true(run.find(f"w:rPr/w:{tag}", namespaces=NS)) for tag in ("i", "iCs")):
+            italic_runs += 1
+    return italic_runs / len(runs)
+
+
 def iter_paragraphs(root) -> List[ParagraphInfo]:
     paragraphs = []
     for idx, p in enumerate(root.xpath(".//w:body//w:p", namespaces=NS), 1):
-        text = "".join(t.text or "" for t in p.xpath(".//w:t", namespaces=NS)).strip()
-        paragraphs.append(ParagraphInfo(index=idx, text=text, style_name=None, node=p))
+        left_indent, first_line_indent = paragraph_indents(p)
+        paragraphs.append(
+            ParagraphInfo(
+                index=idx,
+                text=visible_text(p),
+                style_name=None,
+                node=p,
+                left_indent=left_indent,
+                first_line_indent=first_line_indent,
+                paragraph_italic=paragraph_has_italic(p),
+                italic_run_ratio=italic_ratio(p),
+                has_break=p.find(".//w:br", namespaces=NS) is not None or p.find(".//w:cr", namespaces=NS) is not None,
+            )
+        )
     return paragraphs
 
 
@@ -322,6 +485,10 @@ def looks_like_source(text: str) -> bool:
     t = clean_text(text)
     if not t:
         return False
+    if VERSE_LABEL_PATTERN.match(t):
+        return True
+    if QUOTED_SOURCE_REF_PATTERN.search(t) and len(t.split()) <= 28:
+        return True
     if not SCRIPTURE_PATTERN.search(t):
         return False
     word_count = len(t.split())
@@ -335,7 +502,21 @@ def looks_like_source(text: str) -> bool:
 
 
 def looks_like_caption(text: str) -> bool:
-    return bool(CAPTION_PATTERN.search(clean_text(text)))
+    t = clean_text(text)
+    if CAPTION_PATTERN.search(t):
+        return True
+    word_count = len(t.split())
+    if word_count > 24:
+        return False
+    if "?" in t or "!" in t or t.endswith(":"):
+        return False
+    if re.search(r"\((стр\.|p\.|pp\.)\s*\d", t, flags=re.IGNORECASE):
+        return True
+    # Short captions often contain names with diacritics; those must not be
+    # promoted to `Шлока` merely because of transliteration marks.
+    if SHORT_CAPTION_PATTERN.search(t) and (has_sanskrit_diacritics(t) or word_count <= 10):
+        return True
+    return False
 
 
 def looks_like_letter(text: str) -> bool:
@@ -350,6 +531,8 @@ def looks_like_shloka(text: str) -> bool:
         return False
     if ABBREV_REF_PATTERN.match(t):
         return False
+    if looks_like_sanskrit_quote(text):
+        return True
     score = transliteration_score(t)
     ratio = transliteration_word_ratio(t)
     if score >= 4 and ratio >= 0.45:
@@ -357,6 +540,50 @@ def looks_like_shloka(text: str) -> bool:
     if score >= 2 and ratio >= 0.7:
         return True
     if "\n" in text and score >= 2 and ratio >= 0.35:
+        return True
+    if looks_like_cyrillic_transliteration_shloka(t):
+        return True
+    return False
+
+
+def looks_like_cyrillic_transliteration_shloka(text: str) -> bool:
+    original = clean_text(text)
+    if re.search(r"[А-ЯЁA-Z]", original):
+        return False
+    t = original.casefold()
+    if not t or re.search(r"[.!?«»“”\"():;,]", t):
+        return False
+    words = re.findall(r"[а-яё']+(?:-[а-яё']+)*", t)
+    if not words or len(words) > 16:
+        return False
+    if len(words) == 1 and len(words[0]) < 5:
+        return False
+    cyrillic_words = [word for word in words if re.search(r"[а-яё]", word)]
+    if len(cyrillic_words) != len(words):
+        return False
+    marker_hits = 0
+    hyphenated = 0
+    for word in words:
+        if "-" in word:
+            hyphenated += 1
+        if any(marker in word for marker in CYRILLIC_TRANSLIT_MARKERS):
+            marker_hits += 1
+    if marker_hits >= 2:
+        return True
+    if marker_hits >= 1 and hyphenated >= 1:
+        return True
+    if len(words) <= 4 and marker_hits >= 1 and not any(word in {"и", "в", "на", "не", "но", "что", "как"} for word in words):
+        return True
+    return False
+
+
+def looks_like_visual_shloka(para: ParagraphInfo) -> bool:
+    text = para.text
+    if looks_like_source(text) or looks_like_caption(text):
+        return False
+    if looks_like_shloka(text):
+        return True
+    if para.is_visual_block and has_sanskrit_diacritics(text) and len(clean_text(text).split()) <= 18:
         return True
     return False
 
@@ -368,6 +595,21 @@ def looks_like_translation_of_shloka(text: str) -> bool:
     if t.startswith("«") and t.endswith("»"):
         return True
     if t.startswith("—"):
+        return True
+    return False
+
+
+def looks_like_visual_quote(para: ParagraphInfo) -> bool:
+    t = clean_text(para.text)
+    if not t:
+        return False
+    if looks_like_source(t) or ABBREV_REF_PATTERN.match(t):
+        return False
+    if looks_like_quote(t):
+        return True
+    if para.is_visual_block and t.startswith(("«", "“", '"')):
+        return True
+    if para.is_visual_block and 8 <= len(t.split()) <= 260:
         return True
     return False
 
@@ -468,6 +710,8 @@ def classify_paragraphs(
         new_style = None
         confidence = None
         reason = None
+        prev_assigned = assigned_styles.get(i)
+        prev_prev_assigned = assigned_styles.get(i - 1)
 
         if looks_like_caption(text):
             new_style = "Подпись к иллюстрации"
@@ -481,18 +725,19 @@ def classify_paragraphs(
             new_style = "Письмо"
             confidence = "medium"
             reason = "letter-pattern"
-        elif looks_like_shloka(text):
-            prev_style = assigned_styles.get(i)
-            new_style = "Шлока в цитате" if prev_style == "Цитата 1" else "Шлока"
+        elif prev_assigned in {"Шлока", "Шлока в цитате"} and looks_like_translation_of_shloka(text):
+            new_style = "Перевод шлоки"
             confidence = "high"
-            reason = "transliteration-score"
-        elif looks_like_quote(text) and 8 <= len(clean_text(text).split()) <= 120:
+            reason = "after-shloka-quoted-russian"
+        elif looks_like_visual_shloka(para):
+            new_style = "Шлока в цитате" if prev_assigned == "Цитата 1" else "Шлока"
+            confidence = "high"
+            reason = "visual-or-transliteration-shloka"
+        elif looks_like_visual_quote(para) and (para.is_visual_block or 8 <= len(clean_text(text).split()) <= 180):
             new_style = "Цитата 1"
             confidence = "medium"
-            reason = "standalone-quoted-paragraph"
+            reason = "standalone-or-visual-quote"
         else:
-            prev_assigned = assigned_styles.get(i)
-            prev_prev_assigned = assigned_styles.get(i - 1)
             next_text = paragraphs[i + 1].text if i + 1 < len(paragraphs) else ""
             next_next_text = paragraphs[i + 2].text if i + 2 < len(paragraphs) else ""
 
@@ -500,6 +745,14 @@ def classify_paragraphs(
                 new_style = "Перевод шлоки"
                 confidence = "high"
                 reason = "after-shloka-quoted-russian"
+            elif prev_assigned in {"Шлока", "Шлока в цитате"} and looks_like_visual_shloka(para):
+                new_style = prev_assigned
+                confidence = "high"
+                reason = "continued-shloka-block"
+            elif prev_assigned in {"Цитата 1", "Цитата 2"} and looks_like_visual_quote(para):
+                new_style = prev_assigned
+                confidence = "medium"
+                reason = "continued-quote-block"
             elif looks_like_quote(text) and (
                 looks_like_source(next_text)
                 or looks_like_source(next_next_text)
@@ -530,6 +783,18 @@ def classify_paragraphs(
                     new_style=None,
                     confidence="low",
                     reason="possible-semantic-style-needs-review",
+                    applied=False,
+                )
+            )
+        elif para.is_visual_block or para.paragraph_italic:
+            review.append(
+                Decision(
+                    index=para.index,
+                    text=clean_text(text),
+                    old_style=style,
+                    new_style=None,
+                    confidence="low",
+                    reason="visual-block-or-paragraph-italic-needs-review",
                     applied=False,
                 )
             )

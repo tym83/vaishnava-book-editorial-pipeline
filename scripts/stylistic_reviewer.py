@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
 
@@ -25,6 +26,7 @@ from editorial_review_common import (
 )
 from glossary_policy import contains_phrase, load_glossary_policy
 from review_issue_utils import build_issue
+from sanskrit_diacritics import classify_diacritic_context
 from source_ru_comparator import Block, clean_text
 
 
@@ -244,7 +246,8 @@ def analyze_block(block: Block, story_label: str, issue_counter: List[int]) -> L
                     },
                 )
             )
-        if block.translit_score >= 3:
+        diacritic_decision = classify_diacritic_context(block.text, style_name=block.style_name)
+        if diacritic_decision.action == "normalize_prose":
             issues.append(
                 issue_from_block(
                     block,
@@ -252,9 +255,16 @@ def analyze_block(block: Block, story_label: str, issue_counter: List[int]) -> L
                     kind="stylistic_diacritics_in_prose",
                     severity="info",
                     title="Проверить диакритику в прозе",
-                    message="В прозаическом абзаце есть выраженная санскритская диакритика.",
-                    suggestion="Проверить, должна ли диакритика сохраняться в этом месте или ее нужно снять.",
+                    message="В русской прозе есть санскритская диакритика.",
+                    suggestion="Если это не шлока и не самостоятельная санскритская цитата, снять диакритику по принятому русскому стандарту.",
                     story_label=story_label,
+                    metadata={
+                        "paragraph_index": block.index,
+                        "part": block.part,
+                        "style_name": block.style_name,
+                        "block_kind": block.kind,
+                        "diacritic_decision": diacritic_decision.to_dict(),
+                    },
                 )
             )
         if block.word_count >= 14 and not PROSE_TERMINAL_PUNCT_RE.search(normalized):
@@ -448,6 +458,10 @@ def review_dir(
         "target_dir": str(target_dir),
         "chapters": chapters,
     }
+    total_issues = sum(int(chapter["issue_count"]) for chapter in chapters)
+    total_issue_kinds: Counter[str] = Counter()
+    for chapter in chapters:
+        total_issue_kinds.update(chapter["issue_kinds"])
     write_report_json(output_dir / "index.json", index)
     write_report_md(
         output_dir / "index.md",
@@ -456,6 +470,8 @@ def review_dir(
             f"Target dir: `{target_dir}`",
             "",
             f"- compared: {len(chapters)}",
+            f"- total_issues: {total_issues}",
+            f"- issue_kinds: {dict(total_issue_kinds)}",
         ],
         issues=[],
         max_issue_lines=0,
