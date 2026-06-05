@@ -37,6 +37,9 @@ Use these as the authoritative workflow/spec layer:
 - Use `Гурудев`.
 - Use `Гуру Махарадж`.
 - The current manual glossary snapshot contains `85` approved entries as of `2026-05-03`.
+- `italic_required` glossary terms are italicized with the `Char Курсив` character style; when a term is inside a hyphenated compound the whole compound is italicized, including a sampradaya-name element (e.g. `рамануджа-садху`) — it marks belonging to a tradition, not the named person (Decision 013).
+- Inline shloka citations embedded in prose are set in `Char Курсив` (transliteration = italic). Standalone poem lines get the `Шлока` paragraph style; their translations get `Основной текст` (Decision 015).
+- OCR fixes are never blind find/replace: detect with corpus-internal evidence, apply only a human-reviewed correction map (Decision 014).
 
 ## Current Glossary Workflow
 
@@ -63,6 +66,12 @@ Glossary-backed behavior currently lives in:
 - [scripts/stylistic_reviewer.py](./scripts/stylistic_reviewer.py)
 - [scripts/docx_style_audit.py](./scripts/docx_style_audit.py)
 - [scripts/editorial_pipeline.py](./scripts/editorial_pipeline.py)
+
+Stage `-1` style-finishing helpers (apply on a `*.formatted.docx`, keep a backup, re-run `docx_style_audit.py`):
+
+- [scripts/docx_glossary_italicizer.py](./scripts/docx_glossary_italicizer.py) — glossary terms / compounds → `Char Курсив`.
+- [scripts/docx_ocr_corrector.py](./scripts/docx_ocr_corrector.py) — `detect` (corpus-internal, needs `spylls`) then `apply` a reviewed correction map.
+- [scripts/docx_inline_verse_styler.py](./scripts/docx_inline_verse_styler.py) — poems → `Шлока`, translations → `Основной текст`, inline shlokas → `Char Курсив`, from a reviewed plan.
 
 ## External Assets Not Bundled In This Repo
 

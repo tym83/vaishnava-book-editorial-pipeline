@@ -56,6 +56,12 @@ This is the practical map of the main automation modules.
   Normalize scripture reference formatting.
 - [../scripts/docx_scripture_reference_pipeline.py](../scripts/docx_scripture_reference_pipeline.py)
   Batch reference cleanup for chapter corpora.
+- [../scripts/docx_glossary_italicizer.py](../scripts/docx_glossary_italicizer.py)
+  Apply the `Char Курсив` character style to `italic_required` glossary terms (apply-side counterpart to the `glossary_expected_italic` audit check); `--include-compounds` italicizes whole hyphenated compounds.
+- [../scripts/docx_ocr_corrector.py](../scripts/docx_ocr_corrector.py)
+  Corpus-internal OCR detection (`detect`, high-precision, needs `spylls`) and reviewed-map correction (`apply`).
+- [../scripts/docx_inline_verse_styler.py](../scripts/docx_inline_verse_styler.py)
+  Apply `Шлока` paragraph style to poem lines, `Основной текст` to poem translations, and `Char Курсив` to inline shloka citations, from a reviewed plan JSON.
 
 ## Glossary Workflow
 
