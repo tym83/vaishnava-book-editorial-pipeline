@@ -2,3 +2,7 @@ beautifulsoup4
 lxml
 python-docx
 
+# Optional: corpus-internal OCR detection (docx_ocr_corrector.py detect).
+# Needs a hunspell dictionary on disk (default /usr/share/hunspell/ru_RU).
+# spylls
+
