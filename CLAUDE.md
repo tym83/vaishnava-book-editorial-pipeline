@@ -1,0 +1,6 @@
+@AGENTS.md
+
+## Claude Code
+
+- Use the shared project instructions above.
+- Add Claude-specific notes here only when needed.

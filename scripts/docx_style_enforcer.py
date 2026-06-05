@@ -27,6 +27,12 @@ W = f"{{{W_NS}}}"
 CANONICAL_CHARACTER_STYLES = {"Char Курсив", "Char Полужирный"}
 KEEP_CHARACTER_STYLES = CANONICAL_CHARACTER_STYLES | {"footnote reference", "endnote reference"}
 DEFAULT_FONT = "Charis SIL"
+# Runtime-configurable font policy (see --font / --preserve-fonts).
+# ACTIVE_FONT is the font written into style/run rFonts; PRESERVE_FONTS keeps
+# whatever the document already uses (e.g. when the Gaura Times -> Unicode
+# conversion was intentionally skipped).
+ACTIVE_FONT = DEFAULT_FONT
+PRESERVE_FONTS = False
 
 STYLE_RULES = {
     "Шлока": {"left_cm": 2.0, "center": True, "italic": True},
@@ -215,13 +221,16 @@ def clear_children(parent, tag_names: Iterable[str]) -> None:
             parent.remove(node)
 
 
-def set_run_font(rpr, font_name: str = DEFAULT_FONT) -> None:
+def set_run_font(rpr, font_name: Optional[str] = None) -> None:
+    if PRESERVE_FONTS:
+        return
+    name = font_name or ACTIVE_FONT
     rfonts = rpr.find("w:rFonts", namespaces=NS)
     if rfonts is None:
         rfonts = etree.Element(f"{W}rFonts")
         rpr.insert(0, rfonts)
     for attr in ("ascii", "hAnsi", "cs", "eastAsia"):
-        rfonts.set(f"{W}{attr}", font_name)
+        rfonts.set(f"{W}{attr}", name)
 
 
 def configure_doc_defaults(styles_root) -> None:
@@ -473,6 +482,9 @@ def write_report_md(path: Path, summary: dict) -> None:
 
 
 def cmd_enforce(args) -> None:
+    global ACTIVE_FONT, PRESERVE_FONTS
+    PRESERVE_FONTS = bool(getattr(args, "preserve_fonts", False))
+    ACTIVE_FONT = getattr(args, "font", None) or DEFAULT_FONT
     src, temp_dir = resolve_source(Path(args.input))
     try:
         summary = enforce_docx(
@@ -498,6 +510,14 @@ def build_parser() -> argparse.ArgumentParser:
     enforce.add_argument("output")
     enforce.add_argument("--report-json")
     enforce.add_argument("--report-md")
+    enforce.add_argument(
+        "--font", default=None,
+        help=f"font to write into all styles (default: {DEFAULT_FONT})",
+    )
+    enforce.add_argument(
+        "--preserve-fonts", action="store_true",
+        help="do not touch fonts at all (use when the Gaura Times conversion was skipped)",
+    )
     return parser
 
 
