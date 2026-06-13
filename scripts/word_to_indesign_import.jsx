@@ -95,6 +95,10 @@
         try { prefs.preserveTrackChanges = false; } catch (e) {}
         try { prefs.convertBulletsAndNumbersToText = false; } catch (e) {}
         try { prefs.useTypographersQuotes = true; } catch (e) {}
+        // On a style-name clash, keep the InDesign (template) definition and map
+        // the Word text onto it — so the macket design wins, not Word formatting.
+        try { prefs.resolveParagraphStyleClash = ResolveStyleClash.RESOLVE_CLASH_USE_EXISTING; } catch (e) {}
+        try { prefs.resolveCharacterStyleClash = ResolveStyleClash.RESOLVE_CLASH_USE_EXISTING; } catch (e) {}
     }
 
     function configureSmartReflow(doc) {
