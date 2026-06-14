@@ -18,5 +18,10 @@ env/
 
 output/
 
+# BBT editorial codex — third-party source brought in-project for portability.
+# Kept local only (public repo): the committed layer is the derived dictionaries
+# and rule digests in glossary/bbt_codex_v1/, not this raw source.
+glossary/bbt_codex_v1/_codex_source/
+
 *.swp
 *.swo

@@ -1,0 +1,60 @@
+# bbt_codex_v1 — словари и правила из редакторского кодекса BBT
+
+Производные справочники для редакторской и корректорской сверки, извлечённые из
+официального редакторского кодекса BBT (русская редакция, набор правил 2010 г.)
+и из «чистых» (вычитанных) книг как корпуса подтверждённого курсива.
+
+Дополняет канонический глоссарий `../manual_bbt_v1/glossary_approved.csv`, не
+заменяет его. Канонические домашние решения по стилю — по-прежнему в
+`manual_bbt_v1` и в `../../05-style-guide.md`.
+
+## Происхождение и статус
+- **Источник правил/имён/географии/литературы/слов:** редакторский кодекс BBT.
+  Полный сырой кодекс (47 `.doc` + конвертации) лежит локально в
+  [`_codex_source/`](./_codex_source/) — он **в `.gitignore`** (чужие материалы,
+  публичный репозиторий), но физически в проекте: зависимости от внешней флешки
+  больше нет. В git уходит только этот производный слой (словари + дайджесты).
+- **Источник курсива (`book_italic.csv`):** вычитанные книги
+  «Шри Чайтанья Махапрабху», «Вамшидаса Бабаджи», «Воспоминания» — из них взят
+  **только курсив** (что фактически выделено курсивом в эталоне).
+- Это справочный слой. Автозамены по нему запрещены без корпусной проверки и
+  явного обновления правил (Decisions 013/014 в `AGENTS.md`).
+
+## Содержимое
+
+### Словари (CSV)
+| Файл | Записей | Источник | Что внутри |
+|---|---|---|---|
+| `book_italic.csv` | — | 3 книги | подтверждённый курсив: лемма, формы, частота, есть ли в глоссарии |
+| `names.csv` | ~433 | Имена собственные | имена, компоненты, англ↔рус, прописная/дефис/курсив |
+| `geography.csv` | ~452 | География/астрономия | топонимы + правила (дхама/тиртха/гхат, переименования) |
+| `literature.csv` | ~144 | Литература | названия книг/писаний, кавычки, курсив, сокращения |
+| `words_phrases.csv` | ~847 | Слова и словосочетания | словарь с пометами + некорректные формы |
+
+### Правила (Markdown)
+| Файл | Тема |
+|---|---|
+| `italic_rules.md` | что курсивом / прямым, пунктуация при курсиве |
+| `capitalization_diacritics_rules.md` | прописные эпитеты Господа, местоимения, диакритика |
+| `style_rules.md` | стилистика: склонение санскрита, деепричастия, излишества, благозвучие |
+| `proofreading_index.md` | указатель всех 30 тем «Корректуры» с резюме |
+
+## Колонки словарей
+- `names.csv`: term, english_form, russian_form, type, capitalization_note,
+  hyphenation_note, italic_note, diacritics_note, notes
+- `geography.csv`: name, category, capitalization_note, hyphenation_note,
+  italic_note, declension_note, notes
+- `literature.csv`: title, type, quotes, italic, capitalization_note,
+  diacritics_note, abbreviation, notes
+- `words_phrases.csv`: term, correct_form, capitalization, italic, hyphenation,
+  quotes, discouraged_forms, notes
+- `book_italic.csv`: lemma, observed_forms, total_freq, sources, in_glossary, note
+
+## Воспроизведение курсива из книг
+```bash
+python3 scripts/extract_book_italic.py \
+  "<ШЧМ>.docx" "<Вамшидаса>.formatted.docx" "<Воспоминания>.pdf" \
+  --glossary glossary/manual_bbt_v1/glossary_approved.csv \
+  --out-dir <work-dir>
+```
+Сырьё кодекса BBT конвертируется из `.doc` через `soffice --headless`.
