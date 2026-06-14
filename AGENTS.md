@@ -26,6 +26,10 @@ Use these as the authoritative workflow/spec layer:
 - `Vedabase` is a reference layer, not the authoritative translation source.
 - The canonical glossary source is:
   - [glossary/manual_bbt_v1/glossary_approved.csv](./glossary/manual_bbt_v1/glossary_approved.csv)
+- Reference dictionaries derived from the BBT editorial codex and gold books
+  (italic/names/geography/literature/words + rule digests) live in:
+  - [glossary/bbt_codex_v1/](./glossary/bbt_codex_v1/) — consult for italic,
+    capitalization, names, place names, titles, discouraged forms, and stylistics.
 - Older glossary extraction artifacts are archival and non-canonical:
   - `glossary/review_pack*`
   - `glossary/glossary_base_draft.csv`
@@ -36,7 +40,8 @@ Use these as the authoritative workflow/spec layer:
 
 - Use `Гурудев`.
 - Use `Гуру Махарадж`.
-- The current manual glossary snapshot contains `85` approved entries as of `2026-05-03`.
+- The current manual glossary snapshot contains `121` approved entries as of `2026-06-14` (85 manual + 36 italic lemmas confirmed from gold books; 21 existing lemmas gained observed inflected forms).
+- Italic terms confirmed by the proofread gold books are recorded in [glossary/bbt_codex_v1/book_italic.csv](./glossary/bbt_codex_v1/book_italic.csv); the codex italic rule is digested in [glossary/bbt_codex_v1/italic_rules.md](./glossary/bbt_codex_v1/italic_rules.md).
 - `italic_required` glossary terms are italicized with the `Char Курсив` character style; when a term is inside a hyphenated compound the whole compound is italicized, including a sampradaya-name element (e.g. `рамануджа-садху`) — it marks belonging to a tradition, not the named person (Decision 013).
 - Inline shloka citations embedded in prose are set in `Char Курсив` (transliteration = italic). Standalone poem lines get the `Шлока` paragraph style; their translations get `Основной текст` (Decision 015).
 - OCR fixes are never blind find/replace: detect with corpus-internal evidence, apply only a human-reviewed correction map (Decision 014).
@@ -56,6 +61,8 @@ Use these as the authoritative workflow/spec layer:
   - [09-glossary-spec.md](./09-glossary-spec.md)
   - [20-glossary-review-workflow.md](./20-glossary-review-workflow.md)
   - [10-script-specs.md](./10-script-specs.md)
+  - [glossary/bbt_codex_v1/](./glossary/bbt_codex_v1/) — the BBT-codex reference
+    dictionaries and rule digests (keep in sync when codex policy changes).
 
 ## Current Script Integration
 
@@ -73,17 +80,27 @@ Stage `-1` style-finishing helpers (apply on a `*.formatted.docx`, keep a backup
 - [scripts/docx_ocr_corrector.py](./scripts/docx_ocr_corrector.py) — `detect` (corpus-internal, needs `spylls`) then `apply` a reviewed correction map.
 - [scripts/docx_inline_verse_styler.py](./scripts/docx_inline_verse_styler.py) — poems → `Шлока`, translations → `Основной текст`, inline shlokas → `Char Курсив`, from a reviewed plan.
 
-## External Assets Not Bundled In This Repo
+Gold-corpus italic seeding:
 
-This repo alone is enough for code and docs, but not for full editorial runs.
+- [scripts/extract_book_italic.py](./scripts/extract_book_italic.py) — extract italic spans from proofread `.docx`/`.pdf` books (run/`Char Курсив` style for DOCX, font flags for PDF) into frequency-ranked candidates; source of [glossary/bbt_codex_v1/book_italic.csv](./glossary/bbt_codex_v1/book_italic.csv).
 
-For glossary/reference/editorial work, also carry over or remap:
+## External Assets
 
-- local `Vedabase` mirror
-- BBT correction docs
+The full BBT editorial codex (the raw `.doc` correction docs + converted text)
+now lives **in-project** under
+[`glossary/bbt_codex_v1/_codex_source/`](./glossary/bbt_codex_v1/_codex_source/),
+which is **git-ignored** (third-party material, public repo) but present locally,
+so editorial work no longer depends on the external USB codex folder. The
+committed, shareable layer is the derived dictionaries and rule digests in
+`glossary/bbt_codex_v1/`.
+
+Still external by nature (large / copyrighted, not bundled):
+
+- local `Vedabase` mirror (reference layer)
 - BVKS Russian working/reference books
-
-On the original machine these lived outside the repo under `~/Загрузки/...`.
+- the gold source books used by `extract_book_italic.py` (their derived
+  `book_italic.csv` is committed; the books themselves are needed only to
+  re-run extraction). On the original machine these lived under `~/Загрузки/...`.
 
 ## What Not To Do
 

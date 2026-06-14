@@ -412,3 +412,12 @@
 - `json/md` reports сохраняются как audit trail и материал для feedback loop.
 
 Если review делался по частям, comments всё равно сводятся в один полный `*.all-review.docx`. `review/deep_packs/*.md` не являются рабочей версией для правок.
+
+## 16. Справочные словари и правила BBT
+
+Для курсива, прописных букв, диакритики, имён, топонимов, названий книг,
+некорректных слов и стилистики — словари и дайджесты кодекса BBT в
+[glossary/bbt_codex_v1/](./glossary/bbt_codex_v1/) (`italic_rules.md`,
+`capitalization_diacritics_rules.md`, `style_rules.md`, `proofreading_index.md`
+и соответствующие `*.csv`). Канонические домашние решения остаются в этом
+style guide и в `glossary/manual_bbt_v1/`.
